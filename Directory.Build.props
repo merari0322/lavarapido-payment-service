@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Configuracion comun a TODOS los proyectos de la solucion.
+    net8.0 funciona con Visual Studio 2022 (version 17.8 o superior).
+    Si usas Visual Studio 2022 17.12 o superior tambien puedes cambiar a net9.0.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>
