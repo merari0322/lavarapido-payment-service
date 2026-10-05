@@ -3,7 +3,7 @@
     "PaymentService.Api": {
       "commandName": "Project",
       "launchBrowser": false,
-      "applicationUrl": "http://localhost:5080",
+      "applicationUrl": "http://localhost:3005",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

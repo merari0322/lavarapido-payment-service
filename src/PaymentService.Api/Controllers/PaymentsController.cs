@@ -1,15 +1,23 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using PaymentService.Application.Payments;
 
 namespace PaymentService.Api.Controllers;
-public sealed record RegisterPaymentRequest(long BookingId, short PaymentAccountId, decimal Amount);
-public sealed record AttachReceiptRequest(
-    string FileUrl, long UploadedBy, string? TransactionReference, decimal? ReportedAmount);
-public sealed record ApprovePaymentRequest(long ApprovedBy);
+
+public sealed record ReportPaymentRequest(long BookingId, short PaymentAccountId, string? TransactionReference,
+    string ReceiptImage);
+
 public sealed record RejectPaymentRequest(string Reason);
 
+public sealed record ManualPaymentRequest(long BookingId, short PaymentAccountId, string? TransactionReference);
+
+public sealed record SaveAccountRequest(string MethodCode, string AccountHolder, string? AccountNumber,
+    string? QrImageUrl, string? Instructions, bool Active);
+
+/// <summary>Lo que hace el cliente: ver las cuentas (con su QR), reportar un pago y ver los suyos.</summary>
 [ApiController]
-[Route("api/payments")]
+[Authorize]
+[Route("api/v1")]
 public class PaymentsController : ControllerBase
 {
     private readonly PaymentApplicationService _service;
@@ -19,52 +27,100 @@ public class PaymentsController : ControllerBase
         _service = service;
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Register(RegisterPaymentRequest request, CancellationToken ct)
-    {
-        var id = await _service.RegisterPaymentAsync(
-            request.BookingId, request.PaymentAccountId, request.Amount, ct);
+    /// <summary>Cuentas activas del lavadero que reciben comprobante (Nequi, Daviplata, transferencia).</summary>
+    [HttpGet("payment-accounts")]
+    public async Task<IReadOnlyList<PaymentAccountDto>> Accounts(CancellationToken ct) =>
+        await _service.ActiveAccountsAsync(ct);
 
-        return CreatedAtAction(nameof(GetById), new { id }, new { id });
+    [HttpPost("payments")]
+    [Authorize(Roles = "CLIENT")]
+    public async Task<ActionResult<PaymentView>> Report(ReportPaymentRequest request, CancellationToken ct)
+    {
+        var view = await _service.ReportPaymentAsync(new ReportPaymentCommand(request.BookingId,
+            request.PaymentAccountId, request.TransactionReference, request.ReceiptImage), CallerOf.Request(HttpContext), ct);
+        return Created($"/api/v1/payments/{view.Id}", view);
     }
 
-    [HttpGet("{id:long}")]
-    public async Task<ActionResult<PaymentDto>> GetById(long id, CancellationToken ct) =>
-        Ok(await _service.GetAsync(id, ct));
+    [HttpGet("payments/me")]
+    [Authorize(Roles = "CLIENT")]
+    public async Task<IReadOnlyList<PaymentView>> Mine(CancellationToken ct) =>
+        await _service.MineAsync(CallerOf.Request(HttpContext), ct);
+}
 
-    [HttpPost("{id:long}/receipts")]
-    public async Task<IActionResult> AttachReceipt(long id, AttachReceiptRequest request, CancellationToken ct)
+/// <summary>Revisión de pagos y cuentas del lavadero. Solo ADMIN.</summary>
+[ApiController]
+[Authorize(Roles = "ADMIN")]
+[Route("api/v1/admin")]
+public class AdminPaymentsController : ControllerBase
+{
+    private readonly PaymentApplicationService _service;
+
+    public AdminPaymentsController(PaymentApplicationService service)
     {
-        await _service.AttachReceiptAsync(
-            id, request.FileUrl, request.UploadedBy, request.TransactionReference, request.ReportedAmount, ct);
-        return NoContent();
+        _service = service;
     }
 
-    [HttpPost("{id:long}/submit")]
-    public async Task<IActionResult> Submit(long id, CancellationToken ct)
+    [HttpGet("payments")]
+    public async Task<IReadOnlyList<PaymentView>> List([FromQuery] string? status, CancellationToken ct) =>
+        await _service.ListAsync(status, CallerOf.Request(HttpContext), ct);
+
+    /// <summary>Pago recibido en el lavadero: queda aprobado con el total de la reserva.</summary>
+    [HttpPost("payments")]
+    public async Task<ActionResult<PaymentView>> RegisterManual(ManualPaymentRequest request, CancellationToken ct)
     {
-        await _service.SubmitForReviewAsync(id, ct);
-        return NoContent();
+        var view = await _service.RegisterManualAsync(request.BookingId, request.PaymentAccountId,
+            request.TransactionReference, CallerOf.Request(HttpContext), ct);
+        return Created($"/api/v1/admin/payments/{view.Id}", view);
     }
 
-    [HttpPost("{id:long}/approve")]
-    public async Task<IActionResult> Approve(long id, ApprovePaymentRequest request, CancellationToken ct)
-    {
-        await _service.ApproveAsync(id, request.ApprovedBy, ct);
-        return NoContent();
-    }
+    [HttpPost("payments/{id:long}/approve")]
+    public async Task<PaymentView> Approve(long id, CancellationToken ct) =>
+        await _service.ApproveAsync(id, CallerOf.Request(HttpContext), ct);
 
-    [HttpPost("{id:long}/reject")]
-    public async Task<IActionResult> Reject(long id, RejectPaymentRequest request, CancellationToken ct)
-    {
-        await _service.RejectAsync(id, request.Reason, ct);
-        return NoContent();
-    }
+    [HttpPost("payments/{id:long}/reject")]
+    public async Task<PaymentView> Reject(long id, RejectPaymentRequest request, CancellationToken ct) =>
+        await _service.RejectAsync(id, request.Reason, CallerOf.Request(HttpContext), ct);
 
-    [HttpPost("{id:long}/refund")]
+    [HttpPost("payments/{id:long}/refund")]
     public async Task<IActionResult> Refund(long id, CancellationToken ct)
     {
         await _service.RefundAsync(id, ct);
         return NoContent();
+    }
+
+    [HttpGet("payment-accounts")]
+    public async Task<IReadOnlyList<PaymentAccountDto>> Accounts(CancellationToken ct) =>
+        await _service.AllAccountsAsync(ct);
+
+    [HttpGet("payment-methods")]
+    public async Task<IReadOnlyList<PaymentMethodDto>> Methods(CancellationToken ct) =>
+        await _service.MethodTypesAsync(ct);
+
+    [HttpPost("payment-accounts")]
+    public async Task<ActionResult<PaymentAccountDto>> CreateAccount(SaveAccountRequest request, CancellationToken ct)
+    {
+        var account = await _service.CreateAccountAsync(ToCommand(request), ct);
+        return Created($"/api/v1/admin/payment-accounts/{account.Id}", account);
+    }
+
+    [HttpPut("payment-accounts/{id}")]
+    public async Task<PaymentAccountDto> UpdateAccount(short id, SaveAccountRequest request, CancellationToken ct) =>
+        await _service.UpdateAccountAsync(id, ToCommand(request), ct);
+
+    private static SaveAccountCommand ToCommand(SaveAccountRequest r) =>
+        new(r.MethodCode, r.AccountHolder, r.AccountNumber, r.QrImageUrl, r.Instructions, r.Active);
+}
+
+/// <summary>Quien llama: sub del token y el token mismo, para reenviarlo a booking-service.</summary>
+internal static class CallerOf
+{
+    public static Caller Request(HttpContext http)
+    {
+        var sub = http.User.FindFirst("sub")?.Value;
+        if (!long.TryParse(sub, out var userId))
+            throw new UnauthorizedAccessException("The token has no valid subject");
+        var header = http.Request.Headers.Authorization.ToString();
+        var token = header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? header[7..] : header;
+        return new Caller(userId, token);
     }
 }

@@ -1,11 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace PaymentService.Application.Common;
+
 public class NotFoundException : Exception
 {
-    public NotFoundException(string message) : base(message) { }
+    public string Code { get; }
+
+    public NotFoundException(string message) : this("NOT_FOUND", message) { }
+
+    public NotFoundException(string code, string message) : base(message)
+    {
+        Code = code;
+    }
 }

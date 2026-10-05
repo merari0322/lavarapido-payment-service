@@ -1,13 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PaymentService.Application.Payments;
 using PaymentService.Domain.Payments;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PaymentService.Infrastructure.Persistence;
+
 public class PaymentRepository : IPaymentRepository
 {
     private readonly PaymentDbContext _db;
@@ -22,6 +18,23 @@ public class PaymentRepository : IPaymentRepository
 
     public Task<bool> HasApprovedPaymentAsync(long bookingId, CancellationToken ct) =>
         _db.Payments.AnyAsync(p => p.BookingId == bookingId && p.Status == PaymentStatus.Approved, ct);
+
+    public Task<bool> HasOpenPaymentAsync(long bookingId, CancellationToken ct) =>
+        _db.Payments.AnyAsync(p => p.BookingId == bookingId
+            && (p.Status == PaymentStatus.Pending || p.Status == PaymentStatus.InReview), ct);
+
+    public async Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int take, CancellationToken ct) =>
+        await _db.Payments.Include(p => p.Receipts)
+            .Where(p => status == null || p.Status == status)
+            .OrderByDescending(p => p.Id)
+            .Take(take)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Payment>> ListForBookingsAsync(IReadOnlyCollection<long> bookingIds, CancellationToken ct) =>
+        await _db.Payments.Include(p => p.Receipts)
+            .Where(p => bookingIds.Contains(p.BookingId))
+            .OrderByDescending(p => p.Id)
+            .ToListAsync(ct);
 
     public async Task AddAsync(Payment payment, CancellationToken ct) =>
         await _db.Payments.AddAsync(payment, ct);

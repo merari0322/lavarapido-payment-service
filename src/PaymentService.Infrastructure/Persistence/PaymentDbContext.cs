@@ -1,17 +1,15 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PaymentService.Domain.Payments;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PaymentService.Infrastructure.Persistence;
+
 public class PaymentDbContext : DbContext
 {
     public PaymentDbContext(DbContextOptions<PaymentDbContext> options) : base(options) { }
 
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentAccount> PaymentAccounts => Set<PaymentAccount>();
+    public DbSet<PaymentMethodType> PaymentMethodTypes => Set<PaymentMethodType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
