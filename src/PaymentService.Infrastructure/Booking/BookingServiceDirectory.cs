@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using PaymentService.Application.Common;
 using PaymentService.Application.Common.Exceptions;
@@ -8,10 +7,10 @@ using PaymentService.Application.Ports.Out.Integration;
 namespace PaymentService.Infrastructure.Booking;
 
 /// <summary>
-/// Adaptador REST del puerto IBookingDirectory hacia booking-service. Reenvía el token del usuario
-/// para que booking aplique sus propias reglas (un cliente solo ve sus reservas, /admin solo el
-/// admin). Funciona además como Anti-Corruption Layer: traduce el JSON de booking a BookingInfo,
-/// así un cambio en ese JSON solo toca este archivo.
+/// Adaptador REST del puerto IBookingDirectory hacia booking-service. La identidad del usuario la
+/// agrega AccessTokenForwardingHandler, para que booking aplique sus propias reglas (un cliente
+/// solo ve sus reservas, /admin solo el admin). Funciona además como Anti-Corruption Layer:
+/// traduce el JSON de booking a BookingInfo, así un cambio en ese JSON solo toca este archivo.
 /// </summary>
 internal sealed class BookingServiceDirectory : IBookingDirectory
 {
@@ -22,22 +21,22 @@ internal sealed class BookingServiceDirectory : IBookingDirectory
         _http = http;
     }
 
-    public Task<BookingInfo?> GetForCustomerAsync(long bookingId, string bearerToken, CancellationToken ct) =>
-        GetAsync($"bookings/{bookingId}", bearerToken, ct);
+    public Task<BookingInfo?> GetForCustomerAsync(long bookingId, CancellationToken ct) =>
+        GetAsync($"bookings/{bookingId}", ct);
 
-    public Task<BookingInfo?> GetForAdminAsync(long bookingId, string bearerToken, CancellationToken ct) =>
-        GetAsync($"admin/bookings/{bookingId}", bearerToken, ct);
+    public Task<BookingInfo?> GetForAdminAsync(long bookingId, CancellationToken ct) =>
+        GetAsync($"admin/bookings/{bookingId}", ct);
 
-    public async Task<IReadOnlyList<BookingInfo>> MineAsync(string bearerToken, CancellationToken ct)
+    public async Task<IReadOnlyList<BookingInfo>> MineAsync(CancellationToken ct)
     {
-        using var response = await SendAsync("bookings/me", bearerToken, ct);
+        using var response = await SendAsync("bookings/me", ct);
         var bookings = await response.Content.ReadFromJsonAsync<List<BookingJson>>(ct) ?? new();
         return bookings.Select(ToInfo).ToList();
     }
 
-    private async Task<BookingInfo?> GetAsync(string path, string bearerToken, CancellationToken ct)
+    private async Task<BookingInfo?> GetAsync(string path, CancellationToken ct)
     {
-        using var response = await SendAsync(path, bearerToken, ct);
+        using var response = await SendAsync(path, ct);
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         var booking = await response.Content.ReadFromJsonAsync<BookingJson>(ct);
         return booking is null ? null : ToInfo(booking);
@@ -47,15 +46,12 @@ internal sealed class BookingServiceDirectory : IBookingDirectory
     /// Hace el GET; 404 se devuelve tal cual (la reserva no existe o no es del que llama) y
     /// cualquier otro fallo (red, tiempo de espera, 5xx) se traduce a ServiceUnavailableException.
     /// </summary>
-    private async Task<HttpResponseMessage> SendAsync(string path, string bearerToken, CancellationToken ct)
+    private async Task<HttpResponseMessage> SendAsync(string path, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
-
         HttpResponseMessage response;
         try
         {
-            response = await _http.SendAsync(request, ct);
+            response = await _http.GetAsync(path, ct);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {

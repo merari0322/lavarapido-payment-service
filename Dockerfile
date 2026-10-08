@@ -18,10 +18,11 @@ RUN dotnet publish src/PaymentService.Api/PaymentService.Api.csproj -c Release -
 
 # ---- Runtime -------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
-RUN useradd --system --no-create-home app
 WORKDIR /app
 COPY --from=build /app .
 
-USER app
+# La imagen de .NET 8 ya trae un usuario sin privilegios ("app", UID en $APP_UID): crearlo de
+# nuevo con useradd falla (código 9, "el usuario ya existe").
+USER $APP_UID
 EXPOSE 3005
 ENTRYPOINT ["dotnet", "PaymentService.Api.dll"]

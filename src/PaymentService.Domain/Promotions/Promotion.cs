@@ -4,19 +4,19 @@ using PaymentService.Domain.Promotions.Discounts;
 namespace PaymentService.Domain.Promotions;
 
 /// <summary>
-/// Aggregate root de una promoción (tabla promotion.promotion). Se muestra como paquete (precio de
+/// Aggregate root de una promoción. Se muestra como paquete (precio de
 /// referencia, duración, ícono, beneficios) y es también un cupón real: al canjearla en el pago
 /// descuenta según su tipo (Strategy, ver Discounts/) sobre lo que falta por pagar de la reserva.
 ///
 /// Reglas del canje (Redeem): vigencia y activa, puntos de fidelización suficientes (RequiredPoints),
 /// compra mínima, una sola vez por reserva y los límites de usos total y por cliente. El número de
-/// usos no se guarda aquí: se deriva contando promotion.booking_promotion, para no tener un segundo
-/// contador que se desincronice.
+/// usos no se guarda aquí: se deriva contando los canjes (PromotionRedemption), para no tener un
+/// segundo contador que se desincronice.
 ///
-/// Columnas que no se modelan a propósito: is_public, min_completed_booking y las tablas
-/// promotion_customer / promotion_service. Evaluarlas requiere datos de customer-service y
-/// booking-service que hoy no se exponen; las filas conservan sus valores por defecto (pública,
-/// 0 reservas, sin restricciones), que es exactamente el comportamiento actual.
+/// Reglas que no se modelan a propósito: promoción privada, mínimo de reservas completadas y
+/// restricción por cliente o por servicio. Evaluarlas requiere datos de customer-service y
+/// booking-service que hoy no se exponen; toda promoción se comporta como pública y sin
+/// restricciones, que es exactamente el comportamiento actual.
 /// </summary>
 public sealed class Promotion : AggregateRoot<int>
 {
@@ -39,8 +39,8 @@ public sealed class Promotion : AggregateRoot<int>
     public string? Icon { get; private set; }
     public bool Featured { get; private set; }
 
-    // La columna benefits es NULL cuando no hay beneficios, y EF no pasa los NULL por el conversor:
-    // por eso se persiste este campo nullable y la propiedad pública nunca devuelve null.
+    // "Sin beneficios" se guarda como ausencia de valor (null) en este campo, que es el que se
+    // persiste; la propiedad pública lo expone siempre como lista (vacía si no hay).
     private IReadOnlyList<string>? _benefits;
 
     /// <summary>Una línea por beneficio; es solo texto para mostrar.</summary>
@@ -127,32 +127,41 @@ public sealed class Promotion : AggregateRoot<int>
 
     /// <summary>
     /// Valida todas las reglas del canje y, si se cumplen, devuelve el registro del canje con el
-    /// monto congelado. Cada regla tiene su propio mensaje para que el cliente sepa por qué no pudo.
+    /// monto congelado y registra el evento PromotionRedeemed. Cada regla tiene su propio mensaje
+    /// para que el cliente sepa por qué no pudo.
+    ///
+    /// El evento también marca que la promoción cambió (consumió un uso): al guardarse, dos canjes
+    /// simultáneos de la misma promoción chocan entre sí y los límites de uso no se pueden saltar.
     /// </summary>
     public PromotionRedemption Redeem(RedemptionRequest request)
     {
-        Guard.Against(!IsAvailableOn(request.Today), "PROMOTION_NOT_REDEEMABLE", "Ese cupón no está vigente.");
-        Guard.Against(!IsUnlockedFor(request.CustomerPoints), "PROMOTION_NOT_REDEEMABLE",
+        ArgumentNullException.ThrowIfNull(request);
+        Guard.Against(!IsAvailableOn(request.Today), DomainErrorCodes.PromotionNotRedeemable, "Ese cupón no está vigente.");
+        Guard.Against(!IsUnlockedFor(request.CustomerPoints), DomainErrorCodes.PromotionNotRedeemable,
             "Todavía no acumulas los puntos necesarios para desbloquear ese cupón.");
-        Guard.Against(request.AlreadyRedeemedOnBooking, "PROMOTION_ALREADY_REDEEMED", "Ya canjeaste este cupón en esta reserva.");
-        Guard.Against(request.Subtotal < MinPurchaseAmount, "PROMOTION_MIN_PURCHASE_NOT_MET",
+        Guard.Against(request.AlreadyRedeemedOnBooking, DomainErrorCodes.PromotionAlreadyRedeemed, "Ya canjeaste este cupón en esta reserva.");
+        Guard.Against(request.Subtotal < MinPurchaseAmount, DomainErrorCodes.PromotionMinPurchaseNotMet,
             $"Este cupón exige una compra mínima de {MinPurchaseAmount:N0}.");
-        Guard.Against(MaxRedemptions is { } total && request.TotalRedemptions >= total, "PROMOTION_EXHAUSTED",
+        Guard.Against(MaxRedemptions is { } total && request.TotalRedemptions >= total, DomainErrorCodes.PromotionExhausted,
             "Este cupón ya alcanzó su número máximo de usos.");
         Guard.Against(MaxRedemptionsPerCustomer is { } perCustomer && request.CustomerRedemptions >= perCustomer,
-            "PROMOTION_CUSTOMER_LIMIT_REACHED", "Ya usaste este cupón el máximo de veces permitido.");
+            DomainErrorCodes.PromotionCustomerLimitReached, "Ya usaste este cupón el máximo de veces permitido.");
 
-        return PromotionRedemption.Create(request.BookingId, Id, CalculateDiscount(request.Subtotal), request.CustomerUserId);
+        var redemption = PromotionRedemption.Create(request.BookingId, Id, CalculateDiscount(request.Subtotal),
+            request.CustomerUserId, request.NowUtc);
+        AddDomainEvent(new PromotionRedeemed(Id, Code, Name, request.BookingId, request.BookingCode,
+            request.CustomerUserId, redemption.AppliedAmount, request.NowUtc));
+        return redemption;
     }
 
     // ------------------------------------------------------------------ validación
 
     private void Apply(PromotionDefinition d)
     {
-        Guard.Against(d.Price <= 0, "INVALID_PROMOTION_PRICE", "El precio debe ser mayor a cero.");
-        Guard.Against(d.DurationMinutes <= 0, "INVALID_PROMOTION_DURATION", "La duración debe ser mayor a cero.");
-        Guard.Against(d.ValidTo < d.ValidFrom, "INVALID_PROMOTION_RANGE", "La fecha de fin no puede ser anterior a la de inicio.");
-        Guard.Against(d.RequiredPoints < 0, "INVALID_PROMOTION_REQUIRED_POINTS", "Los puntos requeridos no pueden ser negativos.");
+        Guard.Against(d.Price <= 0, DomainErrorCodes.InvalidPromotionPrice, "El precio debe ser mayor a cero.");
+        Guard.Against(d.DurationMinutes <= 0, DomainErrorCodes.InvalidPromotionDuration, "La duración debe ser mayor a cero.");
+        Guard.Against(d.ValidTo < d.ValidFrom, DomainErrorCodes.InvalidPromotionRange, "La fecha de fin no puede ser anterior a la de inicio.");
+        Guard.Against(d.RequiredPoints < 0, DomainErrorCodes.InvalidPromotionRequiredPoints, "Los puntos requeridos no pueden ser negativos.");
         // La estrategia del tipo sabe qué valores son válidos para ella (y rechaza PACKAGE).
         DiscountStrategyFactory.For(d.DiscountType).Validate(d.DiscountValue);
 
@@ -160,16 +169,16 @@ public sealed class Promotion : AggregateRoot<int>
             .Select(b => b.Trim())
             .Where(b => b.Length > 0)
             .ToList();
-        Guard.Against(string.Join('\n', benefits).Length > MaxBenefitsLength, "INVALID_PROMOTION_BENEFITS",
+        Guard.Against(string.Join('\n', benefits).Length > MaxBenefitsLength, DomainErrorCodes.InvalidPromotionBenefits,
             $"Los beneficios no pueden superar {MaxBenefitsLength} caracteres en total.");
 
-        Code = Guard.Required(d.Code, MaxCodeLength, "INVALID_PROMOTION_CODE",
+        Code = Guard.Required(d.Code, MaxCodeLength, DomainErrorCodes.InvalidPromotionCode,
             $"El código es obligatorio y no puede superar {MaxCodeLength} caracteres.").ToUpperInvariant();
-        Name = Guard.Required(d.Name, MaxNameLength, "INVALID_PROMOTION_NAME",
+        Name = Guard.Required(d.Name, MaxNameLength, DomainErrorCodes.InvalidPromotionName,
             $"El nombre es obligatorio y no puede superar {MaxNameLength} caracteres.");
-        Description = Guard.Optional(d.Description, MaxDescriptionLength, "INVALID_PROMOTION_DESCRIPTION",
+        Description = Guard.Optional(d.Description, MaxDescriptionLength, DomainErrorCodes.InvalidPromotionDescription,
             $"La descripción no puede superar {MaxDescriptionLength} caracteres.");
-        Icon = Guard.Optional(d.Icon, MaxIconLength, "INVALID_PROMOTION_ICON",
+        Icon = Guard.Optional(d.Icon, MaxIconLength, DomainErrorCodes.InvalidPromotionIcon,
             $"El ícono no puede superar {MaxIconLength} caracteres.");
         Price = d.Price;
         DurationMinutes = d.DurationMinutes;

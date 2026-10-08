@@ -16,8 +16,9 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.BookingId).HasColumnName("booking_id");
         builder.Property(p => p.PaymentAccountId).HasColumnName("payment_account_id");
         builder.Property(p => p.Amount).HasColumnName("amount").HasPrecision(12, 2);
-        // El enum vale lo mismo que payment_status_id (ver PaymentStatus).
-        builder.Property(p => p.Status).HasColumnName("payment_status_id").HasConversion<short>();
+        // IDs fijos del catálogo payment_status (ver PaymentStatusIds).
+        builder.Property(p => p.Status).HasColumnName("payment_status_id")
+            .HasConversion(status => PaymentStatusIds.ToId(status), id => PaymentStatusIds.ToStatus(id));
         builder.Property(p => p.ProcessedAtUtc).HasColumnName("processed_at");
         builder.Property(p => p.ApprovedBy).HasColumnName("approved_by");
         builder.Property(p => p.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(Payment.MaxRejectionReasonLength);

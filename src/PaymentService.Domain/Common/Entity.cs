@@ -7,10 +7,11 @@ namespace PaymentService.Domain.Common;
 /// </summary>
 public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull
 {
-    /// <summary>Identificador; lo asigna la base de datos (IDENTITY) al guardar.</summary>
+    /// <summary>Identificador; lo asigna quien persiste la entidad al guardarla por primera vez.</summary>
     public TId Id { get; protected set; } = default!;
 
-    // Constructor sin parámetros: lo usa EF Core para materializar las filas.
+    // Constructor sin parámetros: lo necesita cualquier mecanismo que reconstruya la entidad
+    // desde su almacenamiento (por eso las subclases lo declaran privado).
     protected Entity() { }
 
     protected Entity(TId id)
@@ -25,7 +26,7 @@ public abstract class Entity<TId> : IEquatable<Entity<TId>> where TId : notnull
         if (ReferenceEquals(this, other)) return true;
         if (GetType() != other.GetType()) return false;
 
-        // Una entidad nueva (todavía sin Id de la base) no es igual a ninguna otra.
+        // Una entidad nueva (todavía sin Id) no es igual a ninguna otra.
         if (EqualityComparer<TId>.Default.Equals(Id, default!)) return false;
 
         return EqualityComparer<TId>.Default.Equals(Id, other.Id);

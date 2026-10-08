@@ -13,9 +13,9 @@ namespace PaymentService.Api.Controllers;
 [Route("api/v1/admin/promotions")]
 public sealed class PromotionsController : ControllerBase
 {
-    private readonly IPromotionUseCases _promotions;
+    private readonly IPromotionAdminUseCases _promotions;
 
-    public PromotionsController(IPromotionUseCases promotions)
+    public PromotionsController(IPromotionAdminUseCases promotions)
     {
         _promotions = promotions;
     }
@@ -44,7 +44,7 @@ public sealed class PromotionsController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        await _promotions.DeleteAsync(id, HttpContext.GetCaller().UserId, ct);
+        await _promotions.DeleteAsync(id, HttpContext.GetCaller(), ct);
         return NoContent();
     }
 

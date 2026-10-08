@@ -2,9 +2,10 @@ namespace PaymentService.Application.Common.Exceptions;
 
 /// <summary>
 /// Base de los errores que detecta la capa de aplicación (no son reglas de un aggregate, sino
-/// situaciones del caso de uso: algo no existe, choca con datos ya guardados o un servicio externo
-/// no responde). Cada subclase representa un tipo de error; la API decide el código HTTP por el
-/// tipo, sin depender de listas de códigos de texto.
+/// situaciones del caso de uso: un dato de entrada no válido, algo que no existe, un choque con
+/// datos ya guardados o un servicio externo que no responde). Cada subclase representa un tipo de
+/// error; la API decide el código HTTP por el tipo, sin depender de listas de códigos de texto.
+/// Las reglas de un aggregate siguen lanzando DomainException.
 /// </summary>
 public abstract class ApplicationLayerException : Exception
 {
@@ -15,6 +16,12 @@ public abstract class ApplicationLayerException : Exception
     {
         Code = code;
     }
+}
+
+/// <summary>El pedido trae un dato que el caso de uso no puede usar (medio desconocido, cuenta inactiva...). HTTP 400.</summary>
+public sealed class InvalidRequestException : ApplicationLayerException
+{
+    public InvalidRequestException(string code, string message) : base(code, message) { }
 }
 
 /// <summary>Lo que se pidió no existe (o el que llama no tiene permiso de verlo). HTTP 404.</summary>

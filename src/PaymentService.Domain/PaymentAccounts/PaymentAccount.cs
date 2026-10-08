@@ -3,9 +3,9 @@ using PaymentService.Domain.Common;
 namespace PaymentService.Domain.PaymentAccounts;
 
 /// <summary>
-/// Cuenta del lavadero a la que el cliente paga (tabla payment.payment_account): una por medio de
+/// Cuenta del lavadero a la que el cliente paga: una por medio de
 /// pago, con el QR que el cliente escanea desde la app de su banco. El efectivo también tiene su
-/// fila (sin QR) para que todo pago apunte siempre a alguna cuenta, sin casos especiales.
+/// cuenta (sin QR) para que todo pago apunte siempre a alguna cuenta, sin casos especiales.
 /// </summary>
 public sealed class PaymentAccount : Entity<short>
 {
@@ -42,15 +42,15 @@ public sealed class PaymentAccount : Entity<short>
     {
         ArgumentNullException.ThrowIfNull(method);
         var qr = string.IsNullOrWhiteSpace(qrImageUrl) ? null : qrImageUrl;
-        Guard.Against(qr is not null && !ImageSource.IsImage(qr), "INVALID_QR_IMAGE", "El QR debe ser una imagen.");
+        Guard.Against(qr is not null && !ImageSource.IsImage(qr), DomainErrorCodes.InvalidQrImage, "El QR debe ser una imagen.");
 
         PaymentMethodTypeId = method.Id;
-        AccountHolder = Guard.Required(holder, MaxHolderLength, "INVALID_ACCOUNT_HOLDER",
+        AccountHolder = Guard.Required(holder, MaxHolderLength, DomainErrorCodes.InvalidAccountHolder,
             $"El titular es obligatorio y no puede superar {MaxHolderLength} caracteres.");
-        AccountNumber = Guard.Optional(number, MaxNumberLength, "INVALID_ACCOUNT_NUMBER",
+        AccountNumber = Guard.Optional(number, MaxNumberLength, DomainErrorCodes.InvalidAccountNumber,
             $"El número de cuenta no puede superar {MaxNumberLength} caracteres.");
         QrImageUrl = qr;
-        Instructions = Guard.Optional(instructions, MaxInstructionsLength, "INVALID_ACCOUNT_INSTRUCTIONS",
+        Instructions = Guard.Optional(instructions, MaxInstructionsLength, DomainErrorCodes.InvalidAccountInstructions,
             $"Las instrucciones no pueden superar {MaxInstructionsLength} caracteres.");
         IsActive = active;
     }

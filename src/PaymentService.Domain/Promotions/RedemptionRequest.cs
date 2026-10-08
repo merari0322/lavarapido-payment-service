@@ -6,8 +6,9 @@ namespace PaymentService.Domain.Promotions;
 /// negocio queda en el dominio sin que el dominio dependa de repositorios.
 /// </summary>
 /// <param name="BookingId">Reserva sobre la que se canjea.</param>
+/// <param name="BookingCode">Código visible de la reserva (viaja en el evento del canje).</param>
 /// <param name="CustomerUserId">Cliente que canjea (id de security.app_user).</param>
-/// <param name="Today">Fecha de hoy, para la vigencia.</param>
+/// <param name="NowUtc">Momento del canje; su fecha decide la vigencia.</param>
 /// <param name="CustomerPoints">Saldo actual de puntos del cliente (ledger).</param>
 /// <param name="Subtotal">Lo que falta por pagar de la reserva antes de este canje.</param>
 /// <param name="AlreadyRedeemedOnBooking">Si esta promoción ya se canjeó en esta reserva.</param>
@@ -15,10 +16,15 @@ namespace PaymentService.Domain.Promotions;
 /// <param name="CustomerRedemptions">Cuántas veces la ha canjeado este cliente.</param>
 public sealed record RedemptionRequest(
     long BookingId,
+    string BookingCode,
     long CustomerUserId,
-    DateOnly Today,
+    DateTime NowUtc,
     int CustomerPoints,
     decimal Subtotal,
     bool AlreadyRedeemedOnBooking,
     int TotalRedemptions,
-    int CustomerRedemptions);
+    int CustomerRedemptions)
+{
+    /// <summary>Fecha del canje, para comparar con la vigencia de la promoción.</summary>
+    public DateOnly Today => DateOnly.FromDateTime(NowUtc);
+}

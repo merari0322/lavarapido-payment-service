@@ -1,9 +1,10 @@
+using PaymentService.Application.Common;
 using PaymentService.Application.Promotions;
 
 namespace PaymentService.Application.Ports.In;
 
-/// <summary>Puerto de entrada: gestión de promociones por parte del admin.</summary>
-public interface IPromotionUseCases
+/// <summary>Puerto de entrada: gestión del catálogo de promociones por parte del admin.</summary>
+public interface IPromotionAdminUseCases
 {
     Task<IReadOnlyList<PromotionDto>> ListAsync(CancellationToken ct);
 
@@ -17,5 +18,5 @@ public interface IPromotionUseCases
     Task<PromotionDto> SetActiveAsync(int id, bool active, CancellationToken ct);
 
     /// <summary>Borrado lógico; el histórico de canjes se conserva.</summary>
-    Task DeleteAsync(int id, long deletedBy, CancellationToken ct);
+    Task DeleteAsync(int id, Caller admin, CancellationToken ct);
 }

@@ -18,8 +18,8 @@ public interface IPromotionRepository
     void Add(Promotion promotion);
 
     /// <summary>
-    /// Borrado lógico (deleted_at / deleted_by): la fila se conserva porque booking_promotion
-    /// guarda el histórico de canjes que apunta a ella.
+    /// Borrado lógico (queda registrado quién y cuándo): la promoción se conserva porque los canjes
+    /// históricos apuntan a ella. Las borradas ya no aparecen en las consultas.
     /// </summary>
     void Remove(Promotion promotion, long deletedBy);
 }

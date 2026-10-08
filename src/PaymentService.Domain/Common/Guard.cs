@@ -30,6 +30,6 @@ internal static class Guard
         return trimmed;
     }
 
-    /// <summary>Identificador de otra tabla o servicio: siempre mayor que cero.</summary>
+    /// <summary>Identificador de otra entidad o servicio: siempre mayor que cero.</summary>
     public static void PositiveId(long id, string code, string message) => Against(id <= 0, code, message);
 }

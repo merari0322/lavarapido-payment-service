@@ -17,6 +17,9 @@ internal sealed class LoyaltyTransactionConfiguration : IEntityTypeConfiguration
         // El ID real de cada tipo se resuelve por código al arrancar (ver CatalogIds).
         builder.Property(t => t.MovementType).HasColumnName("loyalty_movement_type_id")
             .HasConversion(type => CatalogIds.ToId(type), id => CatalogIds.ToMovementType(id));
+        // Único por cliente (ux_loyalty_transaction_customer_sequence, migración 020): dos movimientos
+        // calculados sobre el mismo saldo no pueden guardarse los dos.
+        builder.Property(t => t.Sequence).HasColumnName("sequence_no");
         builder.Property(t => t.BookingId).HasColumnName("booking_id");
         builder.Property(t => t.Points).HasColumnName("points");
         builder.Property(t => t.BalanceAfter).HasColumnName("balance_after");
@@ -25,5 +28,7 @@ internal sealed class LoyaltyTransactionConfiguration : IEntityTypeConfiguration
         builder.Property(t => t.CreatedBy).HasColumnName("created_by");
         builder.Property(t => t.CreatedAtUtc).HasColumnName("created_at");
         builder.HasAuditColumns();
+
+        builder.Ignore(t => t.ResultingBalance);
     }
 }

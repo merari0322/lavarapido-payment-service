@@ -1,19 +1,28 @@
 namespace PaymentService.Domain.Loyalty;
 
 /// <summary>
-/// Tipos de movimiento de payment.loyalty_movement_type. El dominio los identifica por su código
-/// (EARNED, REDEEMED...); el ID numérico de la tabla lo resuelve la infraestructura al arrancar,
-/// porque SQL Server puede saltar valores IDENTITY y no conviene suponerlos fijos.
+/// Tipos de movimiento del ledger de puntos. El dominio los identifica por su código (EARNED,
+/// REVERSED...); el ID de cada uno en su catálogo lo resuelve la infraestructura.
 /// </summary>
-public enum LoyaltyMovementType : short
+public enum LoyaltyMovementType
 {
-    Earned = 1,
-    Redeemed = 2,
-    Expired = 3,
-    Adjusted = 4
+    /// <summary>Puntos ganados por una reserva pagada.</summary>
+    Earned,
+
+    /// <summary>Puntos gastados (reservado; hoy los puntos desbloquean promociones, no se gastan).</summary>
+    Redeemed,
+
+    /// <summary>Puntos vencidos.</summary>
+    Expired,
+
+    /// <summary>Ajuste manual del admin.</summary>
+    Adjusted,
+
+    /// <summary>Puntos ganados que se revierten porque el pago de la reserva se reembolsó.</summary>
+    Reversed
 }
 
-/// <summary>Código de la tabla y signo (columna sign) de cada tipo de movimiento.</summary>
+/// <summary>Código y signo de cada tipo de movimiento (lenguaje del negocio).</summary>
 public static class LoyaltyMovementTypeCatalog
 {
     public static string ToCode(this LoyaltyMovementType type) => type switch
@@ -21,14 +30,15 @@ public static class LoyaltyMovementTypeCatalog
         LoyaltyMovementType.Earned => "EARNED",
         LoyaltyMovementType.Redeemed => "REDEEMED",
         LoyaltyMovementType.Expired => "EXPIRED",
-        _ => "ADJUSTED"
+        LoyaltyMovementType.Adjusted => "ADJUSTED",
+        LoyaltyMovementType.Reversed => "REVERSED",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
     };
 
     /// <summary>Si el movimiento suma (+1) o resta (-1) puntos al saldo.</summary>
     public static int Sign(this LoyaltyMovementType type) => type switch
     {
-        LoyaltyMovementType.Redeemed or LoyaltyMovementType.Expired => -1,
-        // ADJUSTED quedó sembrado con signo +1 (provisional en la migración 015).
+        LoyaltyMovementType.Redeemed or LoyaltyMovementType.Expired or LoyaltyMovementType.Reversed => -1,
         _ => 1
     };
 }

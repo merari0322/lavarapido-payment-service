@@ -3,26 +3,25 @@ using PaymentService.Domain.Common;
 namespace PaymentService.Domain.Promotions;
 
 /// <summary>
-/// Tipos de descuento de promotion.discount_type. El dominio los identifica por su código
-/// (PERCENT, FIXED, PACKAGE); el ID numérico de la tabla lo resuelve la infraestructura al
-/// arrancar, porque SQL Server puede saltar valores IDENTITY (PACKAGE puede no ser el 3).
+/// Tipos de descuento de una promoción. El dominio los identifica por su código (PERCENT, FIXED,
+/// PACKAGE); el ID de cada uno en su catálogo lo resuelve la infraestructura.
 /// </summary>
-public enum DiscountType : short
+public enum DiscountType
 {
     /// <summary>Porcentaje sobre el subtotal (DiscountValue entre 0 y 100).</summary>
-    Percentage = 1,
+    Percentage,
 
     /// <summary>Monto fijo en pesos.</summary>
-    FixedAmount = 2,
+    FixedAmount,
 
     /// <summary>
-    /// Tipo histórico (migración 017): guardaba el precio del paquete en discount_value. Ya no se
-    /// crea; las promociones que lo conserven no se pueden canjear hasta que el admin las edite.
+    /// Tipo histórico: guardaba el precio del paquete en DiscountValue. Ya no se crea; las
+    /// promociones que lo conserven no se pueden canjear hasta que el admin las edite.
     /// </summary>
-    Package = 3
+    Package
 }
 
-/// <summary>Traducción entre el enum y el código de la tabla (PERCENT, FIXED, PACKAGE).</summary>
+/// <summary>Traducción entre el enum y su código (PERCENT, FIXED, PACKAGE).</summary>
 public static class DiscountTypeCodes
 {
     public static string ToCode(this DiscountType type) => type switch
@@ -37,6 +36,6 @@ public static class DiscountTypeCodes
     {
         "PERCENT" => DiscountType.Percentage,
         "FIXED" => DiscountType.FixedAmount,
-        _ => throw new DomainException("INVALID_DISCOUNT_TYPE", $"Tipo de descuento desconocido: {code}. Use PERCENT o FIXED.")
+        _ => throw new DomainException(DomainErrorCodes.InvalidDiscountType, $"Tipo de descuento desconocido: {code}. Use PERCENT o FIXED.")
     };
 }

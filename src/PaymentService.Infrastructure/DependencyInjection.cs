@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using PaymentService.Application.Ports.Out.Integration;
 using PaymentService.Application.Ports.Out.Persistence;
 using PaymentService.Infrastructure.Booking;
@@ -15,12 +14,14 @@ namespace PaymentService.Infrastructure;
 /// Conecta cada puerto de salida de Application con su adaptador concreto. Es el único lugar que
 /// sabe que la persistencia es EF Core + SQL Server, que booking se consulta por HTTP y que el bus
 /// es RabbitMQ: cambiar cualquiera de ellos no toca ni el dominio ni los casos de uso.
+///
+/// Lo que esta capa necesita del host y no puede saber por sí misma lo debe registrar el
+/// composition root: el reloj (TimeProvider) y el token del request en curso (IAccessTokenProvider).
 /// </summary>
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.TryAddSingleton(TimeProvider.System);
         AddPersistence(services, configuration);
         AddBookingDirectory(services, configuration);
         AddMessaging(services, configuration);
@@ -55,13 +56,16 @@ public static class DependencyInjection
 
     private static void AddBookingDirectory(IServiceCollection services, IConfiguration configuration)
     {
-        // HttpClient tipado (IHttpClientFactory): URL y tiempo de espera configurables.
+        // HttpClient tipado (IHttpClientFactory): URL y tiempo de espera configurables; el handler
+        // propaga el token del usuario del request a cada llamada.
         var bookingUrl = configuration["BOOKING_SERVICE_URL"] ?? "http://localhost:3003/api/v1";
+        services.AddTransient<AccessTokenForwardingHandler>();
         services.AddHttpClient<IBookingDirectory, BookingServiceDirectory>(http =>
-        {
-            http.BaseAddress = new Uri(bookingUrl.TrimEnd('/') + "/");
-            http.Timeout = TimeSpan.FromSeconds(5);
-        });
+            {
+                http.BaseAddress = new Uri(bookingUrl.TrimEnd('/') + "/");
+                http.Timeout = TimeSpan.FromSeconds(5);
+            })
+            .AddHttpMessageHandler<AccessTokenForwardingHandler>();
     }
 
     private static void AddMessaging(IServiceCollection services, IConfiguration configuration)

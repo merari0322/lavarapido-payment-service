@@ -7,7 +7,8 @@ namespace PaymentService.Domain.UnitTests.Promotions;
 
 public class PromotionTests
 {
-    private static readonly DateOnly Today = new(2026, 10, 8);
+    private static readonly DateTime Now = new(2026, 10, 8, 15, 30, 0, DateTimeKind.Utc);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(Now);
 
     private static PromotionDefinition Definition(DiscountType type = DiscountType.Percentage, decimal value = 10m,
         int requiredPoints = 0) =>
@@ -16,7 +17,7 @@ public class PromotionTests
 
     private static RedemptionRequest Request(decimal subtotal = 40_000m, int points = 0, bool alreadyRedeemed = false,
         int total = 0, int byCustomer = 0) =>
-        new(BookingId: 7, CustomerUserId: 3, Today, points, subtotal, alreadyRedeemed, total, byCustomer);
+        new(BookingId: 7, BookingCode: "RES-7", CustomerUserId: 3, Now, points, subtotal, alreadyRedeemed, total, byCustomer);
 
     // Los límites solo se cargan desde la base; en la prueba se fijan por reflexión.
     private static void SetLimit(Promotion promotion, string property, object? value) =>
@@ -109,6 +110,32 @@ public class PromotionTests
         Assert.Equal(4_000m, redemption.AppliedAmount);
         Assert.Equal(7, redemption.BookingId);
         Assert.Equal(3, redemption.RedeemedBy);
+        Assert.Equal(Now, redemption.RedeemedAtUtc);
+    }
+
+    [Fact]
+    public void Redeem_RaisesPromotionRedeemedEventWithTheAppliedAmount()
+    {
+        var promotion = Promotion.Create(Definition(value: 10m));
+
+        promotion.Redeem(Request(subtotal: 40_000m));
+
+        var redeemed = Assert.IsType<PromotionRedeemed>(Assert.Single(promotion.DomainEvents));
+        Assert.Equal("VERANO10", redeemed.PromotionCode);
+        Assert.Equal("RES-7", redeemed.BookingCode);
+        Assert.Equal(3, redeemed.CustomerUserId);
+        Assert.Equal(4_000m, redeemed.DiscountAmount);
+        Assert.Equal(Now, redeemed.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void Redeem_WhenRejected_RaisesNoEvent()
+    {
+        var promotion = Promotion.Create(Definition(requiredPoints: 100));
+
+        Assert.Throws<DomainException>(() => promotion.Redeem(Request(points: 0)));
+
+        Assert.Empty(promotion.DomainEvents);
     }
 
     [Fact]

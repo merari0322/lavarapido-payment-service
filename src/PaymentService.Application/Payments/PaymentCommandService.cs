@@ -1,5 +1,4 @@
 using PaymentService.Application.Common;
-using PaymentService.Application.Common.Exceptions;
 using PaymentService.Application.Loyalty;
 using PaymentService.Application.Ports.In;
 using PaymentService.Application.Ports.Out.Integration;
@@ -11,15 +10,15 @@ namespace PaymentService.Application.Payments;
 /// <summary>
 /// Casos de uso que cambian el estado de un pago. Cada método sigue el mismo guion:
 ///   1. leer lo necesario (reserva en booking-service, pago, cuenta),
-///   2. validar precondiciones externas (BookingPaymentGuard),
-///   3. delegar la regla al aggregate (Payment.ReportWithReceipt, Approve, Reject...),
-///   4. confirmar todo junto con la Unit of Work,
-///   5. publicar los eventos de integración (solo después de confirmar, para no anunciar algo que
-///      no quedó guardado).
-/// La reserva se consulta ANTES de confirmar: si booking-service no responde, no queda un pago
+///   2. validar precondiciones externas (BookingPaymentGuard) ANTES de tocar el aggregate,
+///   3. delegar la regla al aggregate (Payment.ReportWithReceipt, Approve, Reject, Refund),
+///   4. mantener los puntos de la reserva alineados con el pago (LoyaltyRewardService),
+///   5. confirmar todo junto con la Unit of Work,
+///   6. publicar los eventos de integración (solo después de confirmar).
+/// La reserva se consulta antes de confirmar: si booking-service no responde, no queda un pago
 /// aprobado a medias sin sus puntos.
 /// </summary>
-public sealed class PaymentCommandService : IPaymentCommands
+public sealed class PaymentCommandService : IPaymentCommandUseCases
 {
     private readonly IPaymentRepository _payments;
     private readonly IBookingDirectory _bookings;
@@ -28,11 +27,12 @@ public sealed class PaymentCommandService : IPaymentCommands
     private readonly LoyaltyRewardService _rewards;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIntegrationEventPublisher _events;
-    private readonly PaymentViewFactory _views;
+    private readonly PaymentDtoAssembler _dtos;
+    private readonly TimeProvider _clock;
 
     public PaymentCommandService(IPaymentRepository payments, IBookingDirectory bookings, BookingPaymentGuard guard,
         AmountDueCalculator amountDue, LoyaltyRewardService rewards, IUnitOfWork unitOfWork,
-        IIntegrationEventPublisher events, PaymentViewFactory views)
+        IIntegrationEventPublisher events, PaymentDtoAssembler dtos, TimeProvider clock)
     {
         _payments = payments;
         _bookings = bookings;
@@ -41,94 +41,93 @@ public sealed class PaymentCommandService : IPaymentCommands
         _rewards = rewards;
         _unitOfWork = unitOfWork;
         _events = events;
-        _views = views;
+        _dtos = dtos;
+        _clock = clock;
     }
 
     /// <inheritdoc />
-    public async Task<PaymentView> ReportAsync(ReportPaymentCommand command, Caller caller, CancellationToken ct)
+    public async Task<PaymentDto> ReportAsync(ReportPaymentCommand command, Caller caller, CancellationToken ct)
     {
-        var booking = await _bookings.RequireForCustomerAsync(command.BookingId, caller, ct);
+        var booking = await _bookings.RequireForCustomerAsync(command.BookingId, ct);
         await _guard.EnsureBookingIsUnpaidAsync(booking, allowOpenPayment: false, ct);
         var account = await _guard.GetUsableAccountAsync(command.PaymentAccountId, forCustomerReport: true, ct);
         await _guard.EnsureReferenceNotReusedAsync(command.TransactionReference, booking.Id, ct);
 
         // El monto lo calcula el servidor (total de la reserva menos cupones), nunca el navegador.
         var payment = Payment.ReportWithReceipt(booking.Id, account.Id, await _amountDue.ForAsync(booking, ct),
-            command.ReceiptImage, caller.UserId, command.TransactionReference);
+            command.ReceiptImage, caller.UserId, command.TransactionReference, Now);
 
         _payments.Add(payment);
-        await _unitOfWork.CommitAsync(ct);
-        return await _views.CreateAsync(payment, booking, ct);
+        return await CompleteAsync(payment, booking, ct);
     }
 
     /// <inheritdoc />
-    public async Task<PaymentView> RegisterInPersonAsync(RegisterInPersonPaymentCommand command, Caller admin,
+    public async Task<PaymentDto> RegisterInPersonAsync(RegisterInPersonPaymentCommand command, Caller admin,
         CancellationToken ct)
     {
-        var booking = await _bookings.RequireForAdminAsync(command.BookingId, admin, ct);
+        var booking = await _bookings.RequireForAdminAsync(command.BookingId, ct);
         // Un pago en revisión no impide registrar el que se recibió en persona: el que llegue
         // segundo a aprobarse chocará con "ya tiene un pago aprobado".
         await _guard.EnsureBookingIsUnpaidAsync(booking, allowOpenPayment: true, ct);
         var account = await _guard.GetUsableAccountAsync(command.PaymentAccountId, forCustomerReport: false, ct);
         await _guard.EnsureReferenceNotReusedAsync(command.TransactionReference, booking.Id, ct);
 
+        var now = Now;
         var payment = Payment.RegisterInPerson(booking.Id, account.Id, await _amountDue.ForAsync(booking, ct),
-            admin.UserId, command.TransactionReference);
+            admin.UserId, command.TransactionReference, now);
 
         _payments.Add(payment);
-        await _rewards.CreditForBookingAsync(booking, admin.UserId, ct);
-        await _unitOfWork.CommitAsync(ct);
-        await PublishEventsAsync(payment, booking.OwnerUserId, ct);
-        return await _views.CreateAsync(payment, booking, ct);
+        await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
+        return await CompleteAsync(payment, booking, ct);
     }
 
     /// <inheritdoc />
-    public async Task<PaymentView> ApproveAsync(long paymentId, Caller admin, CancellationToken ct)
+    public async Task<PaymentDto> ApproveAsync(long paymentId, Caller admin, CancellationToken ct)
     {
         var payment = await _payments.GetRequiredAsync(paymentId, ct);
-        payment.Approve(admin.UserId);
+        await _guard.EnsureNoApprovedPaymentAsync(payment.BookingId, ct);
+        // Aprobar acredita los puntos de la reserva: sin ella no se sabe a quién ni cuántos, así
+        // que si booking-service no la encuentra la aprobación no sigue (404) en vez de quedar sin puntos.
+        var booking = await _bookings.RequireForAdminAsync(payment.BookingId, ct);
 
-        // El índice único filtrado también lo impide, pero así el error es claro y temprano.
-        if (await _payments.HasApprovedPaymentAsync(payment.BookingId, ct))
-            throw new ConflictException(ErrorCodes.PaymentAlreadyApproved, "La reserva ya tiene un pago aprobado.");
-
-        var booking = await _bookings.GetForAdminAsync(payment.BookingId, admin.BearerToken, ct);
-        if (booking is not null)
-            await _rewards.CreditForBookingAsync(booking, admin.UserId, ct);
-
-        await _unitOfWork.CommitAsync(ct);
-        await PublishEventsAsync(payment, booking?.OwnerUserId, ct);
-        return await _views.CreateAsync(payment, booking, ct);
+        var now = Now;
+        payment.Approve(admin.UserId, now);
+        await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
+        return await CompleteAsync(payment, booking, ct);
     }
 
     /// <inheritdoc />
-    public Task<PaymentView> RejectAsync(long paymentId, string reason, Caller admin, CancellationToken ct) =>
-        ReviewAsync(paymentId, admin, p => p.Reject(admin.UserId, reason), ct);
-
-    /// <inheritdoc />
-    public Task<PaymentView> RefundAsync(long paymentId, Caller admin, CancellationToken ct) =>
-        ReviewAsync(paymentId, admin, p => p.Refund(), ct);
-
-    /// <summary>
-    /// Guion común de las transiciones que no tocan otros aggregates: cargar, aplicar la regla del
-    /// dominio, confirmar y avisar al cliente dueño de la reserva.
-    /// </summary>
-    private async Task<PaymentView> ReviewAsync(long paymentId, Caller admin, Action<Payment> transition,
-        CancellationToken ct)
+    public async Task<PaymentDto> RejectAsync(long paymentId, string reason, Caller admin, CancellationToken ct)
     {
         var payment = await _payments.GetRequiredAsync(paymentId, ct);
-        transition(payment);
+        payment.Reject(admin.UserId, reason, Now);
 
-        var booking = await _bookings.GetForAdminAsync(payment.BookingId, admin.BearerToken, ct);
-        await _unitOfWork.CommitAsync(ct);
-        await PublishEventsAsync(payment, booking?.OwnerUserId, ct);
-        return await _views.CreateAsync(payment, booking, ct);
+        // La reserva solo hace falta para avisar al cliente y mostrarla: si ya no existe, el
+        // rechazo sigue siendo válido.
+        var booking = await _bookings.GetForAdminAsync(payment.BookingId, ct);
+        return await CompleteAsync(payment, booking, ct);
     }
 
-    private async Task PublishEventsAsync(Payment payment, long? customerUserId, CancellationToken ct)
+    /// <inheritdoc />
+    public async Task<PaymentDto> RefundAsync(long paymentId, Caller admin, CancellationToken ct)
     {
-        foreach (var integrationEvent in PaymentIntegrationEvents.From(payment, customerUserId))
-            await _events.PublishAsync(integrationEvent, ct);
-        payment.ClearDomainEvents();
+        var payment = await _payments.GetRequiredAsync(paymentId, ct);
+        var now = Now;
+        payment.Refund(now);
+        // Los puntos que ganó la reserva con este pago se devuelven junto con el dinero.
+        await _rewards.RevokeForBookingAsync(payment.BookingId, admin.UserId, now, ct);
+
+        var booking = await _bookings.GetForAdminAsync(payment.BookingId, ct);
+        return await CompleteAsync(payment, booking, ct);
+    }
+
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>Pasos 5 y 6 del guion: confirmar, publicar los eventos del pago y devolver su vista.</summary>
+    private async Task<PaymentDto> CompleteAsync(Payment payment, BookingInfo? booking, CancellationToken ct)
+    {
+        await _unitOfWork.CommitAsync(ct);
+        await _events.PublishAndClearAsync(payment, PaymentIntegrationEvents.From(payment, booking?.OwnerUserId), ct);
+        return await _dtos.ToDtoAsync(payment, booking, ct);
     }
 }

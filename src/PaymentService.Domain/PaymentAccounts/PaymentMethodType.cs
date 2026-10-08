@@ -3,8 +3,8 @@ using PaymentService.Domain.Common;
 namespace PaymentService.Domain.PaymentAccounts;
 
 /// <summary>
-/// Medio de pago del catálogo payment.payment_method_type (EFECTIVO, NEQUI, DAVIPLATA,
-/// TRANSFERENCIA). Es de solo lectura para este servicio: lo siembra la migración 015.
+/// Medio de pago del catálogo (EFECTIVO, NEQUI, DAVIPLATA,
+/// TRANSFERENCIA). Es de solo lectura para este servicio: los medios vienen predefinidos.
 /// </summary>
 public sealed class PaymentMethodType : Entity<short>
 {
