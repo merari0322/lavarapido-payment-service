@@ -18,7 +18,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         {
             DomainException e when e.Code == "BOOKING_SERVICE_UNAVAILABLE"
                 => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable", e.Code),
-            DomainException e when e.Code is "PAYMENT_ALREADY_REPORTED" or "PAYMENT_ALREADY_APPROVED"
+            DomainException e when e.Code is "PAYMENT_ALREADY_REPORTED" or "PAYMENT_ALREADY_APPROVED" or "PROMOTION_CODE_TAKEN"
                 => (StatusCodes.Status409Conflict, "Conflict", e.Code),
             DomainException e => (StatusCodes.Status400BadRequest, "Bad Request", e.Code),
             NotFoundException e => (StatusCodes.Status404NotFound, "Not Found", e.Code),

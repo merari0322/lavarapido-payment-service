@@ -64,6 +64,8 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 builder.Services.AddInfrastructure(config);
 builder.Services.AddScoped<PaymentApplicationService>();
+builder.Services.AddScoped<PaymentService.Application.Promotions.PromotionApplicationService>();
+builder.Services.AddScoped<PaymentService.Application.Loyalty.LoyaltyApplicationService>();
 
 var app = builder.Build();
 
