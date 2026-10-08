@@ -1,4 +1,5 @@
 using PaymentService.Application.Common;
+using PaymentService.Application.Loyalty;
 using PaymentService.Domain.Common;
 using PaymentService.Domain.Payments;
 
@@ -12,13 +13,30 @@ public class PaymentApplicationService
     private readonly IPaymentRepository _payments;
     private readonly IPaymentAccountRepository _accounts;
     private readonly IBookingDirectory _bookings;
+    private readonly ILoyaltyRepository _loyalty;
 
     public PaymentApplicationService(IPaymentRepository payments, IPaymentAccountRepository accounts,
-        IBookingDirectory bookings)
+        IBookingDirectory bookings, ILoyaltyRepository loyalty)
     {
         _payments = payments;
         _accounts = accounts;
         _bookings = bookings;
+        _loyalty = loyalty;
+    }
+
+    /// <summary>Lo que realmente paga el cliente: el total de booking-service menos los cupones ya canjeados en esta reserva.</summary>
+    private async Task<decimal> PayableAmountAsync(BookingInfo booking, CancellationToken ct)
+    {
+        var applied = await _loyalty.AppliedDiscountsAsync(booking.Id, ct);
+        return Math.Max(booking.Total - applied, 0m);
+    }
+
+    /// <summary>Acredita al cliente los puntos que ganó la reserva (CatalogItem.loyaltyPoints, ver BookingInfo.TotalLoyaltyPoints).</summary>
+    private async Task CreditLoyaltyAsync(BookingInfo booking, long actor, CancellationToken ct)
+    {
+        if (booking.OwnerUserId is null || booking.TotalLoyaltyPoints <= 0) return;
+        var credited = await _loyalty.CreditEarnedAsync(booking.OwnerUserId.Value, booking.Id, booking.TotalLoyaltyPoints, actor, ct);
+        if (credited) await _loyalty.SaveChangesAsync(ct);
     }
 
     // ------------------------------------------------------------------ cliente
@@ -42,8 +60,9 @@ public class PaymentApplicationService
         if (account is null || !account.IsActive)
             throw new DomainException("INVALID_PAYMENT_ACCOUNT", "La cuenta de pago no existe o no está activa.");
 
-        var payment = Payment.Create(booking.Id, account.Id, booking.Total);
-        payment.AttachReceipt(command.ReceiptImage, caller.UserId, command.TransactionReference?.Trim(), booking.Total);
+        var payable = await PayableAmountAsync(booking, ct);
+        var payment = Payment.Create(booking.Id, account.Id, payable);
+        payment.AttachReceipt(command.ReceiptImage, caller.UserId, command.TransactionReference?.Trim(), payable);
         payment.SubmitForReview();
 
         await _payments.AddAsync(payment, ct);
@@ -102,14 +121,16 @@ public class PaymentApplicationService
         if (account is null || !account.IsActive)
             throw new DomainException("INVALID_PAYMENT_ACCOUNT", "La cuenta de pago no existe o no está activa.");
 
-        var payment = Payment.Create(booking.Id, account.Id, booking.Total);
+        var payable = await PayableAmountAsync(booking, ct);
+        var payment = Payment.Create(booking.Id, account.Id, payable);
         // sin imagen: el soporte es el registro del admin que recibió el pago
-        payment.AttachReceipt("manual:registrado-por-admin", admin.UserId, reference?.Trim(), booking.Total);
+        payment.AttachReceipt("manual:registrado-por-admin", admin.UserId, reference?.Trim(), payable);
         payment.SubmitForReview();
         payment.Approve(admin.UserId);
 
         await _payments.AddAsync(payment, ct);
         await _payments.SaveChangesAsync(ct);
+        await CreditLoyaltyAsync(booking, admin.UserId, ct);
         return await ViewAsync(payment, booking, ct);
     }
 
@@ -123,7 +144,9 @@ public class PaymentApplicationService
 
         payment.Approve(admin.UserId);
         await _payments.SaveChangesAsync(ct);
-        return await ViewAsync(payment, await _bookings.GetForAdminAsync(payment.BookingId, admin.BearerToken, ct), ct);
+        var booking = await _bookings.GetForAdminAsync(payment.BookingId, admin.BearerToken, ct);
+        if (booking is not null) await CreditLoyaltyAsync(booking, admin.UserId, ct);
+        return await ViewAsync(payment, booking, ct);
     }
 
     public async Task<PaymentView> RejectAsync(long paymentId, string reason, Caller admin, CancellationToken ct)
