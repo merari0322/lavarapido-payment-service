@@ -1,10 +1,17 @@
 using Microsoft.EntityFrameworkCore;
+using PaymentService.Domain.Loyalty;
+using PaymentService.Domain.PaymentAccounts;
 using PaymentService.Domain.Payments;
 using PaymentService.Domain.Promotions;
 
 namespace PaymentService.Infrastructure.Persistence;
 
-public class PaymentDbContext : DbContext
+/// <summary>
+/// DbContext de EF Core sobre los esquemas payment y promotion de la base compartida (ADR-003).
+/// Las tablas las crea Liquibase (db/changelog), no EF: aquí solo se describe cómo se mapean las
+/// entidades del dominio a columnas existentes (ver Configurations/).
+/// </summary>
+public sealed class PaymentDbContext : DbContext
 {
     public PaymentDbContext(DbContextOptions<PaymentDbContext> options) : base(options) { }
 
@@ -12,13 +19,9 @@ public class PaymentDbContext : DbContext
     public DbSet<PaymentAccount> PaymentAccounts => Set<PaymentAccount>();
     public DbSet<PaymentMethodType> PaymentMethodTypes => Set<PaymentMethodType>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
-    public DbSet<BookingPromotionRecord> BookingPromotions => Set<BookingPromotionRecord>();
-    public DbSet<DiscountTypeRecord> DiscountTypes => Set<DiscountTypeRecord>();
-    public DbSet<LoyaltyTransactionRecord> LoyaltyTransactions => Set<LoyaltyTransactionRecord>();
-    public DbSet<LoyaltyMovementTypeRecord> LoyaltyMovementTypes => Set<LoyaltyMovementTypeRecord>();
+    public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
+    public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
+    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaymentDbContext).Assembly);
-    }
 }

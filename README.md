@@ -52,19 +52,92 @@ La migración se detiene sola si no es así.
 
 # Solución C# / ASP.NET Core
 
+## Arquitectura hexagonal
+
+Las dependencias apuntan siempre hacia el dominio. El dominio no conoce a nadie; la aplicación
+define **puertos** (interfaces) y la infraestructura y la API los implementan como **adaptadores**.
+
 ```
-payment-service/
-├── PaymentService.sln
-├── Directory.Build.props        ← versión de .NET y opciones comunes (net8.0)
-├── Dockerfile                   ← build multi-stage para correrlo con lavarapido-infra
-├── db/changelog/...             ← migraciones Liquibase
-├── src/
-│   ├── PaymentService.Domain/          ← reglas de negocio puras (Common/Entity, AggregateRoot...)
-│   ├── PaymentService.Application/     ← casos de uso (cuentas de pago, reporte y revisión de pagos)
-│   ├── PaymentService.Infrastructure/  ← EF Core, SQL Server (repositorios y DbContext)
-│   └── PaymentService.Api/             ← controllers HTTP, JWT, CORS y /health
-└── tests/PaymentService.Domain.UnitTests/
+        Api (adaptadores de entrada: HTTP)          Infrastructure (adaptadores de salida)
+                     │                                  │  EF Core · booking-service · RabbitMQ
+                     ▼                                  ▼
+              Ports/In ──► Application ◄── Ports/Out
+                               │
+                               ▼
+                             Domain   (sin dependencias)
 ```
+
+```
+src/
+├── PaymentService.Domain/                 ← reglas de negocio puras, sin EF ni HTTP
+│   ├── Common/          Entity, AggregateRoot, DomainEvent, DomainException, Guard, ImageSource
+│   ├── Payments/        Payment (aggregate: máquina de estados), PaymentReceipt, PaymentStatus, eventos
+│   ├── PaymentAccounts/ PaymentAccount, PaymentMethodType
+│   ├── Promotions/      Promotion (aggregate), PromotionRedemption, DiscountType,
+│   │   └── Discounts/   IDiscountStrategy + Percentage/FixedAmount + DiscountStrategyFactory
+│   └── Loyalty/         LoyaltyTransaction (ledger), LoyaltyMovementType
+├── PaymentService.Application/            ← casos de uso; solo conoce al dominio
+│   ├── Ports/In/        IPaymentCommands, IPaymentQueries, IPaymentAccountUseCases,
+│   │                    IPromotionUseCases, ILoyaltyUseCases   (los usan los controllers)
+│   ├── Ports/Out/       Persistence (IUnitOfWork + repositorios), Integration (IBookingDirectory,
+│   │                    IIntegrationEventPublisher)            (los implementa Infrastructure)
+│   ├── Payments/        PaymentCommandService, PaymentQueryService, BookingPaymentGuard,
+│   │                    AmountDueCalculator, PaymentViewFactory, PaymentIntegrationEvents
+│   ├── PaymentAccounts/ PaymentAccountService, PaymentAccountReader
+│   ├── Promotions/      PromotionService, PromotionMapper
+│   ├── Loyalty/         LoyaltyService, LoyaltyRewardService
+│   ├── Common/          Caller, ErrorCodes, excepciones (NotFound / Conflict / ServiceUnavailable)
+│   └── DependencyInjection.cs   AddApplication()
+├── PaymentService.Infrastructure/         ← adaptadores de salida
+│   ├── Persistence/     PaymentDbContext, EfUnitOfWork, Configurations/ (mapeo a tablas), Repositories/
+│   ├── Booking/         BookingServiceDirectory (REST a booking-service, capa anticorrupción)
+│   ├── Messaging/       RabbitMqIntegrationEventPublisher, NullIntegrationEventPublisher
+│   └── DependencyInjection.cs   AddInfrastructure()
+└── PaymentService.Api/                    ← adaptadores de entrada + composition root
+    ├── Controllers/     Payments, AdminPayments, AdminPaymentAccounts, Promotions, Loyalty
+    ├── Contracts/       cuerpos JSON de request/response
+    ├── Errors/          GlobalExceptionHandler (tipo de excepción → 400/404/409/503)
+    ├── Http/            HttpContext → Caller
+    ├── Configuration/   EnvFile, JWT, CORS, cadena de conexión
+    └── Program.cs
+```
+
+### Patrones aplicados
+
+| Patrón | Dónde | Por qué |
+|--------|-------|---------|
+| Aggregate / Domain Events | `Payment`, `Promotion` | protegen sus invariantes; los eventos se publican después de guardar |
+| Factory Method | `Payment.ReportWithReceipt`, `Payment.RegisterInPerson`, `Promotion.Create`, `LoyaltyTransaction.Earn` | los dos caminos reales por los que entra un pago quedan explícitos |
+| Strategy + Factory | `Promotions/Discounts` | cada tipo de descuento (PERCENT, FIXED) calcula a su manera, sin `switch` en `Promotion` |
+| Repository | `Ports/Out/Persistence` | los casos de uso no saben que hay EF Core |
+| Unit of Work | `IUnitOfWork` → `EfUnitOfWork` | aprobar un pago y acreditar sus puntos se guardan en una sola transacción |
+| Null Object | `NullIntegrationEventPublisher` | sin RabbitMQ, los casos de uso no preguntan si hay bus |
+| Parameter Object | `PromotionDefinition`, `RedemptionRequest` | evita listas de 13 parámetros y deja la regla de canje en el dominio |
+| Anti-Corruption Layer | `BookingServiceDirectory` | traduce el JSON de booking-service a `BookingInfo` |
+| CQRS ligero | `PaymentCommandService` / `PaymentQueryService` | las consultas no cargan la Unit of Work ni el bus |
+| Dependency Injection | `AddApplication()`, `AddInfrastructure()` | `Program.cs` es el único lugar que junta las capas |
+
+### Tablas (`06-data/models.md`) y cómo se cubren
+
+| Tabla | Modelo | Reglas que se hacen cumplir |
+|-------|--------|-----------------------------|
+| `payment.payment` | `Payment` | monto > 0; estados PENDING → IN_REVIEW → APPROVED/REJECTED → REFUNDED; un solo APPROVED por reserva (validación + índice filtrado → 409) |
+| `payment.payment_receipt` | `PaymentReceipt` | `reviewed_at`/`reviewed_by` siempre juntos (se llenan al aprobar/rechazar); antifraude: la misma `transaction_reference` no puede pagar dos reservas (409 `TRANSACTION_REFERENCE_REUSED`) |
+| `payment.payment_account` / `payment_method_type` | `PaymentAccount`, `PaymentMethodType` | el cliente solo reporta a medios con `requires_receipt`; el efectivo lo registra el admin |
+| `payment.payment_status` | `PaymentStatus` (enum = ID) | IDs verificados por las migraciones 015 y 019 |
+| `payment.loyalty_transaction` / `loyalty_movement_type` | `LoyaltyTransaction`, `LoyaltyMovementType` (ID resuelto por código al arrancar, `CatalogIds`) | ledger append-only; `balance_after` nunca negativo; acreditación idempotente por reserva |
+| `promotion.promotion` / `discount_type` | `Promotion`, `DiscountType` (ID resuelto por código al arrancar: SQL Server puede saltar IDENTITY) | vigencia, puntos requeridos, `min_purchase_amount`, `max_discount_amount`, `max_redemptions`, `max_redemptions_per_customer` |
+| `promotion.booking_promotion` | `PromotionRedemption` | una vez por reserva; `applied_amount > 0` congelado al canjear |
+| `promotion.promotion_customer`, `promotion_service`, columnas `is_public` y `min_completed_booking` | — | **no modelados todavía**: evaluarlos necesita datos de customer-service y booking-service que hoy no se exponen; las filas conservan sus valores por defecto |
+
+### Eventos que publica (carwash.events, con `MESSAGING_ENABLED=true`)
+
+| Evento | Routing key | Cuándo |
+|--------|-------------|--------|
+| `PaymentConfirmed` | `payment.confirmed` | pago aprobado (también el registrado en persona) |
+| `PaymentRejected` | `payment.rejected` | pago rechazado (incluye `reason`) |
+| `PaymentRefunded` | `payment.refunded` | pago reembolsado |
+| `PromotionRedeemed` | `payment.promotion_redeemed` | cupón canjeado |
 
 ## Levantarlo con el resto del backend (recomendado)
 
@@ -110,7 +183,7 @@ dotnet build
 dotnet test
 ```
 
-Esperado: `Build succeeded` con 0 errores, y 3 pruebas pasadas.
+Esperado: `Build succeeded` con 0 errores, y 74 pruebas pasadas.
 
 ## 3. Levantar la API y ver que responde
 
