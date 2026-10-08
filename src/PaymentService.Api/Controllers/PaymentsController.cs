@@ -40,7 +40,7 @@ public sealed class PaymentsController : ControllerBase
     public async Task<ActionResult<PaymentDto>> Report(ReportPaymentRequest request, CancellationToken ct)
     {
         var command = new ReportPaymentCommand(request.BookingId, request.PaymentAccountId,
-            request.TransactionReference, request.ReceiptImage);
+            request.TransactionReference, request.ReceiptImage, request.ReportedAmount);
         var payment = await _commands.ReportAsync(command, HttpContext.GetCaller(), ct);
         return Created($"/api/v1/payments/{payment.Id}", payment);
     }

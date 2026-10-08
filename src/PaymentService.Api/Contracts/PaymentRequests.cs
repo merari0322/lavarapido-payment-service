@@ -4,9 +4,12 @@ namespace PaymentService.Api.Contracts;
 // solo cómo llegan los datos por HTTP (*Request) y los traduce a los Commands de Application; las
 // respuestas son los *Dto de Application tal cual (ver Application/Payments/PaymentContracts.cs).
 
-/// <summary>El cliente reporta un pago: reserva, cuenta a la que pagó, referencia e imagen del comprobante (data URL).</summary>
+/// <summary>
+/// El cliente reporta un pago: reserva, cuenta a la que pagó, referencia, imagen del comprobante
+/// (data URL) y, opcionalmente, el monto que figura en el comprobante.
+/// </summary>
 public sealed record ReportPaymentRequest(long BookingId, short PaymentAccountId, string? TransactionReference,
-    string ReceiptImage);
+    string ReceiptImage, decimal? ReportedAmount = null);
 
 /// <summary>El admin registra un pago recibido en el lavadero.</summary>
 public sealed record ManualPaymentRequest(long BookingId, short PaymentAccountId, string? TransactionReference);

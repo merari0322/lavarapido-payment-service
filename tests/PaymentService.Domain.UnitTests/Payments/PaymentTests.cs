@@ -71,20 +71,35 @@ public class PaymentTests
     [Fact]
     public void ReportWithReceipt_LeavesPaymentInReviewWithItsReceipt()
     {
-        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, " REF-1 ", Now);
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, " REF-1 ", Now,
+            reportedAmount: 75m);
 
         Assert.Equal(PaymentStatus.InReview, payment.Status);
+        Assert.Equal(80m, payment.Amount);
         var receipt = Assert.Single(payment.Receipts);
         Assert.Equal("REF-1", receipt.TransactionReference);
-        Assert.Equal(80m, receipt.ReportedAmount);
+        Assert.Equal(75m, receipt.ReportedAmount);
         Assert.True(receipt.HasImage);
     }
 
     [Fact]
-    public void ReportWithReceipt_WhenFileIsNotAnImage_ThrowsDomainException()
+    public void ReportWithReceipt_WithoutReportedAmount_DoesNotPretendTheReceiptMatches()
+    {
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, null, Now);
+
+        Assert.Null(Assert.Single(payment.Receipts).ReportedAmount);
+    }
+
+    [Theory]
+    [InlineData("no-es-imagen")]
+    [InlineData("https://sitio-del-cliente.com/comprobante.png")]
+    [InlineData("data:image/svg+xml;base64,PHN2Zz4=")]
+    [InlineData("data:text/html;base64,PGh0bWw+")]
+    [InlineData("data:image/png;base64,")]
+    public void ReportWithReceipt_WhenFileIsNotAnAllowedImage_ThrowsDomainException(string file)
     {
         var error = Assert.Throws<DomainException>(() =>
-            Payment.ReportWithReceipt(10, 2, 80m, "no-es-imagen", reportedBy: 5, null, Now));
+            Payment.ReportWithReceipt(10, 2, 80m, file, reportedBy: 5, null, Now));
 
         Assert.Equal("INVALID_RECEIPT_FILE", error.Code);
     }
