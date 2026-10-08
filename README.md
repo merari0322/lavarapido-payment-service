@@ -16,9 +16,11 @@ Cuando termine, el contenedor `pay-sqlserver` queda escuchando en `localhost:143
 
 ```bash
 MSYS_NO_PATHCONV=1 docker exec pay-sqlserver /opt/mssql-tools/bin/sqlcmd \
-  -S localhost -U sa -P 'Lavado_Dev_2026!' -d lavado_vehicular \
+  -S localhost -U sa -P "$DB_PASSWORD" -d lavado_vehicular \
   -Q "SELECT s.name AS esquema, COUNT(*) AS tablas FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id WHERE s.name IN ('promotion','payment') GROUP BY s.name"
 ```
+
+(`$DB_PASSWORD` es la misma contraseña que pusiste en `lavarapido-infra/.env`. Nunca la escribas en claro en un commit.)
 
 Resultado esperado: `payment` = 7 y `promotion` = 5 (más las 2 tablas de control de Liquibase en `dbo`).
 
@@ -32,7 +34,7 @@ docker compose up --abort-on-container-exit migrate
 ## Con el CLI de Liquibase instalado (opcional)
 
 ```bash
-export LIQUIBASE_COMMAND_PASSWORD='Lavado_Dev_2026!'
+export LIQUIBASE_COMMAND_PASSWORD="$DB_PASSWORD"
 liquibase update
 ```
 
@@ -54,14 +56,29 @@ La migración se detiene sola si no es así.
 payment-service/
 ├── PaymentService.sln
 ├── Directory.Build.props        ← versión de .NET y opciones comunes (net8.0)
+├── Dockerfile                   ← build multi-stage para correrlo con lavarapido-infra
 ├── db/changelog/...             ← migraciones Liquibase
 ├── src/
 │   ├── PaymentService.Domain/          ← reglas de negocio puras (Common/Entity, AggregateRoot...)
-│   ├── PaymentService.Application/     ← casos de uso (vacío por ahora)
-│   ├── PaymentService.Infrastructure/  ← EF Core, SQL Server (vacío por ahora)
-│   └── PaymentService.Api/             ← controllers HTTP + /health
+│   ├── PaymentService.Application/     ← casos de uso (cuentas de pago, reporte y revisión de pagos)
+│   ├── PaymentService.Infrastructure/  ← EF Core, SQL Server (repositorios y DbContext)
+│   └── PaymentService.Api/             ← controllers HTTP, JWT, CORS y /health
 └── tests/PaymentService.Domain.UnitTests/
 ```
+
+## Levantarlo con el resto del backend (recomendado)
+
+El servicio ya está integrado en `docker-compose.yml` de `lavarapido-infra` (perfil `app`), en el
+puerto **3005**, enrutado por el api-gateway en `/api/v1/payments/**` y `/api/v1/payment-accounts`.
+Lee las variables de `../lavarapido-infra/.env` igual que los servicios Java (`EnvFile.cs`).
+
+```bash
+cd ../lavarapido-infra
+docker compose --profile app up -d --build
+```
+
+No necesitas repetir los pasos de Liquibase de este README: `payment-migrate` ya corre los
+changelogs contra la base compartida `LavaRapido` antes de que arranque este servicio.
 
 Dependencias (las flechas indican quién conoce a quién):
 
