@@ -8,5 +8,5 @@ public sealed class FixedAmountDiscountStrategy : IDiscountStrategy
     public decimal Calculate(decimal subtotal, decimal discountValue) => discountValue;
 
     public void Validate(decimal discountValue) =>
-        Guard.Against(discountValue <= 0, "INVALID_PROMOTION_DISCOUNT", "El descuento fijo debe ser mayor que cero.");
+        Guard.Against(discountValue <= 0, DomainErrorCodes.InvalidPromotionDiscount, "El descuento fijo debe ser mayor que cero.");
 }

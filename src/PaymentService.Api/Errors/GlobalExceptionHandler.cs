@@ -9,8 +9,9 @@ namespace PaymentService.Api.Errors;
 /// Traduce las excepciones de las capas internas a respuestas RFC 9457 (ProblemDetails) con un
 /// campo "code", igual que los servicios Java: la web traduce API_ERRORS.&lt;code&gt; y Detail es
 /// para el desarrollador. El código HTTP se decide por el TIPO de excepción, no por su texto:
+///   DomainException (regla de un aggregate) y InvalidRequestException → 400,
 ///   NotFoundException → 404, ConflictException → 409, ServiceUnavailableException → 503,
-///   DomainException (regla de negocio) → 400, UnauthorizedAccessException → 401.
+///   UnauthorizedAccessException → 401.
 /// Cualquier otra excepción sigue al manejador por defecto (500, sin detalles internos).
 /// </summary>
 internal sealed class GlobalExceptionHandler : IExceptionHandler
@@ -19,10 +20,11 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
     {
         var mapped = exception switch
         {
+            DomainException e => (StatusCodes.Status400BadRequest, "Bad Request", e.Code),
+            InvalidRequestException e => (StatusCodes.Status400BadRequest, "Bad Request", e.Code),
             NotFoundException e => (StatusCodes.Status404NotFound, "Not Found", e.Code),
             ConflictException e => (StatusCodes.Status409Conflict, "Conflict", e.Code),
             ServiceUnavailableException e => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable", e.Code),
-            DomainException e => (StatusCodes.Status400BadRequest, "Bad Request", e.Code),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", "UNAUTHORIZED"),
             _ => ((int Status, string Title, string Code)?)null
         };

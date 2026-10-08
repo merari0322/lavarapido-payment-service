@@ -8,16 +8,16 @@ namespace PaymentService.Application.Promotions;
 
 /// <summary>
 /// Gestión de promociones por parte del admin: catálogo (crear, editar, pausar, borrar) y las
-/// cifras de uso, que se derivan de promotion.booking_promotion.
+/// cifras de uso, que se derivan de los canjes registrados.
 /// </summary>
-public sealed class PromotionService : IPromotionUseCases
+public sealed class PromotionAdminService : IPromotionAdminUseCases
 {
     private readonly IPromotionRepository _promotions;
     private readonly IPromotionRedemptionRepository _redemptions;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _clock;
 
-    public PromotionService(IPromotionRepository promotions, IPromotionRedemptionRepository redemptions,
+    public PromotionAdminService(IPromotionRepository promotions, IPromotionRedemptionRepository redemptions,
         IUnitOfWork unitOfWork, TimeProvider clock)
     {
         _promotions = promotions;
@@ -74,10 +74,10 @@ public sealed class PromotionService : IPromotionUseCases
     }
 
     /// <inheritdoc />
-    public async Task DeleteAsync(int id, long deletedBy, CancellationToken ct)
+    public async Task DeleteAsync(int id, Caller admin, CancellationToken ct)
     {
         var promotion = await LoadAsync(id, ct);
-        _promotions.Remove(promotion, deletedBy);
+        _promotions.Remove(promotion, admin.UserId);
         await _unitOfWork.CommitAsync(ct);
     }
 

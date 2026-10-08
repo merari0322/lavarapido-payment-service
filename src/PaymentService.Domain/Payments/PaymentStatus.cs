@@ -3,22 +3,21 @@ using PaymentService.Domain.Common;
 namespace PaymentService.Domain.Payments;
 
 /// <summary>
-/// Los cinco estados de payment.payment_status. Los valores numéricos SON los IDs sembrados por la
-/// migración 015 (una fila por INSERT, en este orden). APPROVED = 3 está además fijado en el índice
-/// único filtrado ux_payment_one_approved_per_booking, y la migración se detiene si no coincide.
+/// Estados del ciclo de vida de un pago. El dominio no conoce los IDs de la tabla
+/// payment.payment_status: la traducción enum ↔ ID vive en la infraestructura (PaymentStatusIds).
 /// </summary>
-public enum PaymentStatus : short
+public enum PaymentStatus
 {
-    Pending = 1,
-    InReview = 2,
-    Approved = 3,
-    Rejected = 4,
-    Refunded = 5
+    Pending,
+    InReview,
+    Approved,
+    Rejected,
+    Refunded
 }
 
 /// <summary>
-/// Traducción entre el enum y el código de la tabla (PENDING, IN_REVIEW...), que es lo que viaja
-/// en el JSON y en los filtros. Vive en el dominio porque esos códigos son lenguaje del negocio.
+/// Traducción entre el enum y su código (PENDING, IN_REVIEW...), que es lo que viaja en el JSON y
+/// en los filtros. Vive en el dominio porque esos códigos son lenguaje del negocio.
 /// </summary>
 public static class PaymentStatusCodes
 {
@@ -43,6 +42,6 @@ public static class PaymentStatusCodes
         var normalized = code.Trim().ToUpperInvariant();
         foreach (var (status, value) in Codes)
             if (value == normalized) return status;
-        throw new DomainException("INVALID_PAYMENT_STATUS", $"Estado de pago desconocido: {code}.");
+        throw new DomainException(DomainErrorCodes.InvalidPaymentStatus, $"Estado de pago desconocido: {code}.");
     }
 }

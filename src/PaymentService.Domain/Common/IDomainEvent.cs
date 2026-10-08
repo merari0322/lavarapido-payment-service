@@ -10,10 +10,7 @@ public interface IDomainEvent
 }
 
 /// <summary>
-/// Base de los eventos de dominio como records inmutables: fija la fecha en que ocurrieron para
-/// que cada evento concreto solo declare sus propios datos.
+/// Base de los eventos de dominio como records inmutables. La fecha la pone el aggregate con el
+/// "ahora" que recibe del caso de uso (nunca DateTime.UtcNow), así las pruebas la pueden fijar.
 /// </summary>
-public abstract record DomainEvent : IDomainEvent
-{
-    public DateTime OccurredOnUtc { get; } = DateTime.UtcNow;
-}
+public abstract record DomainEvent(DateTime OccurredOnUtc) : IDomainEvent;

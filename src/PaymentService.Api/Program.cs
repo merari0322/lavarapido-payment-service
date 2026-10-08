@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using PaymentService.Api.Configuration;
 using PaymentService.Api.Errors;
 using PaymentService.Application;
+using PaymentService.Api.Http;
 using PaymentService.Infrastructure;
+using PaymentService.Infrastructure.Booking;
 
 // Composition root: el único lugar donde se juntan todas las capas. Api conoce a Application (los
 // casos de uso) y a Infrastructure (los adaptadores) solo para conectarlos aquí; el dominio y los
@@ -32,6 +34,12 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Casos de uso (puertos de entrada) y adaptadores (puertos de salida).
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(config);
+
+// Recursos del host que las capas internas usan pero no deciden: el reloj y la identidad del
+// request en curso (Infrastructure la reenvía a booking-service).
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IAccessTokenProvider, HttpContextAccessTokenProvider>();
 
 var app = builder.Build();
 

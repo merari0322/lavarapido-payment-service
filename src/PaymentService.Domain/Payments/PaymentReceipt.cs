@@ -3,17 +3,18 @@ using PaymentService.Domain.Common;
 namespace PaymentService.Domain.Payments;
 
 /// <summary>
-/// Comprobante que respalda un pago (tabla payment.payment_receipt). Es parte del aggregate
+/// Comprobante que respalda un pago. Es parte del aggregate
 /// Payment: solo se crea y se revisa a través de él, por eso sus métodos son internal.
 ///
-/// Se guarda aparte del pago (y no como columna) para que un comprobante corregido no borre el
-/// anterior: ambos quedan en el historial.
+/// Es una entidad aparte del pago (y no un dato del pago) para que un comprobante corregido no
+/// borre el anterior: ambos quedan en el historial.
 /// </summary>
 public sealed class PaymentReceipt : Entity<long>
 {
     /// <summary>
-    /// file_url es NOT NULL; un pago registrado en persona por el admin no tiene imagen, así que se
-    /// guarda este marcador. Como no es imagen (ImageSource), la web no intenta mostrarlo.
+    /// Todo comprobante tiene un archivo. Un pago registrado en persona por el admin no tiene
+    /// imagen, así que su "archivo" es este marcador. Como no es imagen (ImageSource), la web no
+    /// intenta mostrarlo.
     /// </summary>
     public const string InPersonFileMarker = "manual:registrado-por-admin";
 
@@ -33,8 +34,7 @@ public sealed class PaymentReceipt : Entity<long>
     public long UploadedBy { get; private set; }
     public DateTime UploadedAtUtc { get; private set; }
 
-    // La tabla exige (ck_preceipt_review) que reviewed_at y reviewed_by vayan juntos: por eso solo
-    // se asignan en MarkReviewed, nunca por separado.
+    // Quién revisó y cuándo van siempre juntos: por eso solo se asignan en MarkReviewed.
     public long? ReviewedBy { get; private set; }
     public DateTime? ReviewedAtUtc { get; private set; }
     public string? ReviewComment { get; private set; }
@@ -45,16 +45,18 @@ public sealed class PaymentReceipt : Entity<long>
     internal static PaymentReceipt Create(string fileUrl, long uploadedBy, string? transactionReference,
         decimal? reportedAmount, DateTime uploadedAtUtc)
     {
-        Guard.Against(string.IsNullOrWhiteSpace(fileUrl), "INVALID_RECEIPT_FILE", "El comprobante debe tener un archivo.");
-        Guard.PositiveId(uploadedBy, "INVALID_RECEIPT_UPLOADER", "El comprobante debe indicar quién lo subió.");
-        Guard.Against(reportedAmount is <= 0, "INVALID_REPORTED_AMOUNT",
+        Guard.Against(string.IsNullOrWhiteSpace(fileUrl), DomainErrorCodes.InvalidReceiptFile,
+            "El comprobante debe tener un archivo.");
+        Guard.PositiveId(uploadedBy, DomainErrorCodes.InvalidReceiptUploader, "El comprobante debe indicar quién lo subió.");
+        Guard.Against(reportedAmount is <= 0, DomainErrorCodes.InvalidReportedAmount,
             "El monto reportado en el comprobante debe ser mayor que cero.");
 
         return new PaymentReceipt
         {
             FileUrl = fileUrl,
             UploadedBy = uploadedBy,
-            TransactionReference = Guard.Optional(transactionReference, MaxReferenceLength, "INVALID_TRANSACTION_REFERENCE",
+            TransactionReference = Guard.Optional(transactionReference, MaxReferenceLength,
+                DomainErrorCodes.InvalidTransactionReference,
                 $"La referencia no puede superar {MaxReferenceLength} caracteres."),
             ReportedAmount = reportedAmount,
             UploadedAtUtc = uploadedAtUtc
@@ -64,11 +66,11 @@ public sealed class PaymentReceipt : Entity<long>
     /// <summary>Deja constancia de quién revisó el comprobante, cuándo y con qué comentario.</summary>
     internal void MarkReviewed(long reviewedBy, string? comment, DateTime reviewedAtUtc)
     {
-        Guard.PositiveId(reviewedBy, "INVALID_REVIEWER", "La revisión debe indicar quién revisa.");
+        Guard.PositiveId(reviewedBy, DomainErrorCodes.InvalidReviewer, "La revisión debe indicar quién revisa.");
 
         ReviewedBy = reviewedBy;
         ReviewedAtUtc = reviewedAtUtc;
-        ReviewComment = Guard.Optional(comment, MaxReviewCommentLength, "INVALID_REVIEW_COMMENT",
+        ReviewComment = Guard.Optional(comment, MaxReviewCommentLength, DomainErrorCodes.InvalidReviewComment,
             $"El comentario de revisión no puede superar {MaxReviewCommentLength} caracteres.");
     }
 }

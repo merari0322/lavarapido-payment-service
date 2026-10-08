@@ -13,10 +13,10 @@ namespace PaymentService.Api.Controllers;
 [Route("api/v1/admin/payments")]
 public sealed class AdminPaymentsController : ControllerBase
 {
-    private readonly IPaymentCommands _commands;
-    private readonly IPaymentQueries _queries;
+    private readonly IPaymentCommandUseCases _commands;
+    private readonly IPaymentQueryUseCases _queries;
 
-    public AdminPaymentsController(IPaymentCommands commands, IPaymentQueries queries)
+    public AdminPaymentsController(IPaymentCommandUseCases commands, IPaymentQueryUseCases queries)
     {
         _commands = commands;
         _queries = queries;
@@ -24,28 +24,27 @@ public sealed class AdminPaymentsController : ControllerBase
 
     /// <summary>Cola de pagos, opcionalmente filtrada por estado (PENDING, IN_REVIEW, APPROVED, REJECTED, REFUNDED).</summary>
     [HttpGet]
-    public Task<IReadOnlyList<PaymentView>> List([FromQuery] string? status, CancellationToken ct) =>
-        _queries.ListAsync(status, HttpContext.GetCaller(), ct);
+    public Task<IReadOnlyList<PaymentDto>> List([FromQuery] string? status, CancellationToken ct) =>
+        _queries.ListAsync(status, ct);
 
     [HttpGet("{id:long}")]
-    public Task<PaymentView> Get(long id, CancellationToken ct) =>
-        _queries.GetAsync(id, HttpContext.GetCaller(), ct);
+    public Task<PaymentDto> Get(long id, CancellationToken ct) => _queries.GetAsync(id, ct);
 
-    /// <summary>Pago recibido en el lavadero: queda aprobado con el total de la reserva.</summary>
+    /// <summary>Pago recibido en el lavadero: queda aprobado con lo que falta por pagar de la reserva.</summary>
     [HttpPost]
-    public async Task<ActionResult<PaymentView>> RegisterManual(ManualPaymentRequest request, CancellationToken ct)
+    public async Task<ActionResult<PaymentDto>> RegisterManual(ManualPaymentRequest request, CancellationToken ct)
     {
         var command = new RegisterInPersonPaymentCommand(request.BookingId, request.PaymentAccountId, request.TransactionReference);
-        var view = await _commands.RegisterInPersonAsync(command, HttpContext.GetCaller(), ct);
-        return Created($"/api/v1/admin/payments/{view.Id}", view);
+        var payment = await _commands.RegisterInPersonAsync(command, HttpContext.GetCaller(), ct);
+        return Created($"/api/v1/admin/payments/{payment.Id}", payment);
     }
 
     [HttpPost("{id:long}/approve")]
-    public Task<PaymentView> Approve(long id, CancellationToken ct) =>
+    public Task<PaymentDto> Approve(long id, CancellationToken ct) =>
         _commands.ApproveAsync(id, HttpContext.GetCaller(), ct);
 
     [HttpPost("{id:long}/reject")]
-    public Task<PaymentView> Reject(long id, RejectPaymentRequest request, CancellationToken ct) =>
+    public Task<PaymentDto> Reject(long id, RejectPaymentRequest request, CancellationToken ct) =>
         _commands.RejectAsync(id, request.Reason, HttpContext.GetCaller(), ct);
 
     /// <summary>Devuelve un pago aprobado. Responde 204 (contrato previo de la web).</summary>

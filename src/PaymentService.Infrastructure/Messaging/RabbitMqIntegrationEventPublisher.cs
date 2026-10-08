@@ -46,7 +46,8 @@ internal sealed class RabbitMqIntegrationEventPublisher : IIntegrationEventPubli
             ["eventId"] = eventId,
             ["eventType"] = integrationEvent.EventType,
             ["aggregateId"] = integrationEvent.AggregateId,
-            ["occurredAt"] = DateTimeOffset.UtcNow.ToString("O"),
+            // cuándo ocurrió el hecho de negocio, no cuándo se publicó
+            ["occurredAt"] = new DateTimeOffset(DateTime.SpecifyKind(integrationEvent.OccurredOnUtc, DateTimeKind.Utc)).ToString("O"),
             ["version"] = ContractVersion,
             ["payload"] = integrationEvent.Payload
         };

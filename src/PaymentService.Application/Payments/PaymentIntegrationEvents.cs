@@ -6,8 +6,8 @@ namespace PaymentService.Application.Payments;
 
 /// <summary>
 /// Traduce los eventos de dominio de un pago al contrato de integración que escucha
-/// notification-service (routing keys payment.confirmed / payment.rejected de cross-cutting.md §7;
-/// EventNotificationFactory lee paymentId, customerUserId, amount y reason).
+/// notification-service (routing keys payment.confirmed / payment.rejected / payment.refunded;
+/// el consumidor lee paymentId, customerUserId, amount y reason).
 ///
 /// El dominio no sabe quién es el cliente (la reserva es de booking-service), por eso
 /// customerUserId llega aparte. El PaymentId se toma del aggregate ya guardado, no del evento.
@@ -15,18 +15,18 @@ namespace PaymentService.Application.Payments;
 internal static class PaymentIntegrationEvents
 {
     public static IEnumerable<IntegrationEvent> From(Payment payment, long? customerUserId) =>
-        payment.DomainEvents.Select(e => Map(payment, e, customerUserId)).OfType<IntegrationEvent>();
+        payment.DomainEvents.Select(e => Map(payment, e, customerUserId)).OfType<IntegrationEvent>().ToList();
 
     private static IntegrationEvent? Map(Payment payment, IDomainEvent domainEvent, long? customerUserId) => domainEvent switch
     {
-        PaymentApproved e => Create("PaymentConfirmed", "payment.confirmed", payment, customerUserId, e.BookingId, e.Amount, null),
-        PaymentRejected e => Create("PaymentRejected", "payment.rejected", payment, customerUserId, e.BookingId, e.Amount, e.Reason),
-        PaymentRefunded e => Create("PaymentRefunded", "payment.refunded", payment, customerUserId, e.BookingId, e.Amount, null),
+        PaymentApproved e => Create("PaymentConfirmed", "payment.confirmed", payment, customerUserId, e.BookingId, e.Amount, null, e.OccurredOnUtc),
+        PaymentRejected e => Create("PaymentRejected", "payment.rejected", payment, customerUserId, e.BookingId, e.Amount, e.Reason, e.OccurredOnUtc),
+        PaymentRefunded e => Create("PaymentRefunded", "payment.refunded", payment, customerUserId, e.BookingId, e.Amount, null, e.OccurredOnUtc),
         _ => null
     };
 
     private static IntegrationEvent Create(string eventType, string routingKey, Payment payment, long? customerUserId,
-        long bookingId, decimal amount, string? reason)
+        long bookingId, decimal amount, string? reason, DateTime occurredOnUtc)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -36,6 +36,6 @@ internal static class PaymentIntegrationEvents
             ["amount"] = amount
         };
         if (reason is not null) payload["reason"] = reason;
-        return new IntegrationEvent(eventType, routingKey, payment.Id.ToString(), payload);
+        return new IntegrationEvent(eventType, routingKey, payment.Id.ToString(), occurredOnUtc, payload);
     }
 }

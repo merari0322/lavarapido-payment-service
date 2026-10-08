@@ -16,7 +16,7 @@ public static class DiscountStrategyFactory
         DiscountType.Percentage => Percentage,
         DiscountType.FixedAmount => FixedAmount,
         // PACKAGE guardaba un precio, no un descuento: calcularlo regalaría la reserva completa.
-        _ => throw new DomainException("PROMOTION_DISCOUNT_UNSUPPORTED",
+        _ => throw new DomainException(DomainErrorCodes.PromotionDiscountUnsupported,
             "Esta promoción usa un tipo de descuento que ya no se admite; el administrador debe editarla.")
     };
 }

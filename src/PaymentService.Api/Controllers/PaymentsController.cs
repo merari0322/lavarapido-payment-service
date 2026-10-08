@@ -17,11 +17,12 @@ namespace PaymentService.Api.Controllers;
 [Route("api/v1")]
 public sealed class PaymentsController : ControllerBase
 {
-    private readonly IPaymentCommands _commands;
-    private readonly IPaymentQueries _queries;
+    private readonly IPaymentCommandUseCases _commands;
+    private readonly IPaymentQueryUseCases _queries;
     private readonly IPaymentAccountUseCases _accounts;
 
-    public PaymentsController(IPaymentCommands commands, IPaymentQueries queries, IPaymentAccountUseCases accounts)
+    public PaymentsController(IPaymentCommandUseCases commands, IPaymentQueryUseCases queries,
+        IPaymentAccountUseCases accounts)
     {
         _commands = commands;
         _queries = queries;
@@ -36,23 +37,21 @@ public sealed class PaymentsController : ControllerBase
     /// <summary>Reporta un pago con su comprobante; queda en revisión.</summary>
     [HttpPost("payments")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<ActionResult<PaymentView>> Report(ReportPaymentRequest request, CancellationToken ct)
+    public async Task<ActionResult<PaymentDto>> Report(ReportPaymentRequest request, CancellationToken ct)
     {
         var command = new ReportPaymentCommand(request.BookingId, request.PaymentAccountId,
             request.TransactionReference, request.ReceiptImage);
-        var view = await _commands.ReportAsync(command, HttpContext.GetCaller(), ct);
-        return Created($"/api/v1/payments/{view.Id}", view);
+        var payment = await _commands.ReportAsync(command, HttpContext.GetCaller(), ct);
+        return Created($"/api/v1/payments/{payment.Id}", payment);
     }
 
     /// <summary>Pagos de las reservas del cliente que llama.</summary>
     [HttpGet("payments/me")]
     [Authorize(Roles = "CLIENT")]
-    public Task<IReadOnlyList<PaymentView>> Mine(CancellationToken ct) =>
-        _queries.MineAsync(HttpContext.GetCaller(), ct);
+    public Task<IReadOnlyList<PaymentDto>> Mine(CancellationToken ct) => _queries.MineAsync(ct);
 
     /// <summary>Un pago propio (404 si no existe o es de otra persona).</summary>
     [HttpGet("payments/{id:long}")]
     [Authorize(Roles = "CLIENT")]
-    public Task<PaymentView> GetMine(long id, CancellationToken ct) =>
-        _queries.GetMineAsync(id, HttpContext.GetCaller(), ct);
+    public Task<PaymentDto> GetMine(long id, CancellationToken ct) => _queries.GetMineAsync(id, ct);
 }

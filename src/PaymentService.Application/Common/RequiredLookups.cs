@@ -16,12 +16,12 @@ internal static class RequiredLookups
         ?? throw new NotFoundException(ErrorCodes.PaymentNotFound, $"No existe el pago {paymentId}.");
 
     public static async Task<BookingInfo> RequireForCustomerAsync(this IBookingDirectory bookings, long bookingId,
-        Caller caller, CancellationToken ct) =>
-        await bookings.GetForCustomerAsync(bookingId, caller.BearerToken, ct) ?? throw BookingNotFound(bookingId);
+        CancellationToken ct) =>
+        await bookings.GetForCustomerAsync(bookingId, ct) ?? throw BookingNotFound(bookingId);
 
     public static async Task<BookingInfo> RequireForAdminAsync(this IBookingDirectory bookings, long bookingId,
-        Caller admin, CancellationToken ct) =>
-        await bookings.GetForAdminAsync(bookingId, admin.BearerToken, ct) ?? throw BookingNotFound(bookingId);
+        CancellationToken ct) =>
+        await bookings.GetForAdminAsync(bookingId, ct) ?? throw BookingNotFound(bookingId);
 
     private static NotFoundException BookingNotFound(long bookingId) =>
         new(ErrorCodes.BookingNotFound, $"No existe la reserva {bookingId}.");

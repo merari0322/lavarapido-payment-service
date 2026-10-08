@@ -2,7 +2,7 @@ using PaymentService.Domain.Promotions;
 
 namespace PaymentService.Application.Ports.Out.Persistence;
 
-/// <summary>Repository de los canjes (promotion.booking_promotion) y de las cifras que se derivan de ellos.</summary>
+/// <summary>Repository de los canjes de promociones y de las cifras que se derivan de ellos.</summary>
 public interface IPromotionRedemptionRepository
 {
     Task<bool> ExistsAsync(long bookingId, int promotionId, CancellationToken ct);

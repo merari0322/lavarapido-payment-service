@@ -1,25 +1,27 @@
 namespace PaymentService.Application.Ports.Out.Integration;
 
 /// <summary>
-/// Puerto hacia booking-service, dueño de las reservas (REST con el token del usuario, ADR-004).
-/// El cliente solo ve sus reservas; el admin, todas. El monto a pagar sale de aquí, nunca del
-/// navegador. Si booking-service no responde, el adaptador lanza ServiceUnavailableException.
+/// Puerto hacia booking-service, dueño de las reservas. El cliente solo ve sus reservas; el admin,
+/// todas. Quién llama lo resuelve el adaptador (propaga la identidad del usuario del request), así
+/// el caso de uso no maneja tokens. El monto a pagar sale de aquí, nunca del navegador.
+/// Si booking-service no responde, el adaptador lanza ServiceUnavailableException.
 /// </summary>
 public interface IBookingDirectory
 {
-    /// <summary>La reserva si es del cliente dueño del token; null si no existe o no es suya.</summary>
-    Task<BookingInfo?> GetForCustomerAsync(long bookingId, string bearerToken, CancellationToken ct);
+    /// <summary>La reserva si es del cliente que hace el request; null si no existe o no es suya.</summary>
+    Task<BookingInfo?> GetForCustomerAsync(long bookingId, CancellationToken ct);
 
-    /// <summary>Todas las reservas del cliente dueño del token.</summary>
-    Task<IReadOnlyList<BookingInfo>> MineAsync(string bearerToken, CancellationToken ct);
+    /// <summary>Todas las reservas del cliente que hace el request.</summary>
+    Task<IReadOnlyList<BookingInfo>> MineAsync(CancellationToken ct);
 
-    /// <summary>Cualquier reserva (requiere token de ADMIN); null si no existe.</summary>
-    Task<BookingInfo?> GetForAdminAsync(long bookingId, string bearerToken, CancellationToken ct);
+    /// <summary>Cualquier reserva (el request debe ser de un ADMIN); null si no existe.</summary>
+    Task<BookingInfo?> GetForAdminAsync(long bookingId, CancellationToken ct);
 }
 
 /// <summary>
-/// Lo que payment-service necesita saber de una reserva. También viaja tal cual en la respuesta de
-/// los pagos (la web lo muestra), por eso conserva estos nombres de campo.
+/// Lo que payment-service necesita saber de una reserva. Es un modelo interno del puerto: no sale
+/// tal cual en las respuestas (para eso está PaymentBookingDto), así un cambio en booking-service
+/// no rompe el contrato con la web.
 /// </summary>
 public sealed record BookingInfo(
     long Id,

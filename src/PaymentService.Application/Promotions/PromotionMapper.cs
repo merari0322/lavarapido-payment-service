@@ -1,4 +1,3 @@
-using PaymentService.Application.Loyalty;
 using PaymentService.Application.Ports.Out.Persistence;
 using PaymentService.Domain.Promotions;
 

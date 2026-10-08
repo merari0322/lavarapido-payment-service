@@ -2,7 +2,6 @@ using PaymentService.Application.Common;
 using PaymentService.Application.Common.Exceptions;
 using PaymentService.Application.Ports.In;
 using PaymentService.Application.Ports.Out.Persistence;
-using PaymentService.Domain.Common;
 using PaymentService.Domain.PaymentAccounts;
 
 namespace PaymentService.Application.PaymentAccounts;
@@ -62,5 +61,5 @@ public sealed class PaymentAccountService : IPaymentAccountUseCases
 
     private async Task<PaymentMethodType> RequireMethodAsync(string? code, CancellationToken ct) =>
         (string.IsNullOrWhiteSpace(code) ? null : await _accounts.GetMethodTypeByCodeAsync(code, ct))
-        ?? throw new DomainException(ErrorCodes.InvalidPaymentMethod, $"Medio de pago desconocido: {code}.");
+        ?? throw new InvalidRequestException(ErrorCodes.InvalidPaymentMethod, $"Medio de pago desconocido: {code}.");
 }

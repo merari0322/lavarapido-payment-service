@@ -18,9 +18,11 @@ public interface IIntegrationEventPublisher
 /// <param name="EventType">Nombre que entiende el consumidor (PaymentConfirmed, PaymentRejected...).</param>
 /// <param name="RoutingKey">Clave de ruteo del topic exchange (payment.confirmed...).</param>
 /// <param name="AggregateId">Id de la entidad a la que se refiere.</param>
+/// <param name="OccurredOnUtc">Cuándo ocurrió el hecho (la fecha del evento de dominio, no la de publicación).</param>
 /// <param name="Payload">Datos del evento (camelCase, como los servicios en Java).</param>
 public sealed record IntegrationEvent(
     string EventType,
     string RoutingKey,
     string AggregateId,
+    DateTime OccurredOnUtc,
     IReadOnlyDictionary<string, object?> Payload);
