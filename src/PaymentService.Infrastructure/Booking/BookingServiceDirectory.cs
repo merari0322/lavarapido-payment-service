@@ -75,12 +75,13 @@ public sealed class BookingServiceDirectory : IBookingDirectory
         if (vehicle is not null && name.Length == 0) name = vehicle.VehicleTypeName ?? "";
         return new BookingInfo(b.Id, b.Code ?? "", b.Status ?? "", b.Total, b.Date ?? "", b.StartTime ?? "",
             string.Join(", ", (b.Services ?? new()).Select(s => s.Name)), name,
-            vehicle?.LicensePlateFormatted ?? "", b.OwnerUserId);
+            vehicle?.LicensePlateFormatted ?? "", b.OwnerUserId, b.TotalLoyaltyPoints);
     }
 
     // forma del JSON de booking-service (solo los campos que se usan)
     private sealed record BookingJson(long Id, string? Code, string? Status, decimal Total, string? Date,
-        string? StartTime, List<LineJson>? Services, VehicleJson? Vehicle, long? OwnerUserId);
+        string? StartTime, List<LineJson>? Services, VehicleJson? Vehicle, long? OwnerUserId,
+        int TotalLoyaltyPoints);
 
     private sealed record LineJson(string Name);
 

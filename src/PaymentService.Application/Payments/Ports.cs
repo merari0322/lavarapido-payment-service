@@ -16,7 +16,8 @@ public sealed record BookingInfo(
     string Services,
     string Vehicle,
     string Plate,
-    long? OwnerUserId);
+    long? OwnerUserId,
+    int TotalLoyaltyPoints);
 
 /// <summary>
 /// Puerto hacia booking-service (REST con el token del usuario, ADR-004). El cliente solo ve
