@@ -41,6 +41,7 @@ public sealed class PaymentDtoAssembler
             payment.ProcessedAtUtc,
             payment.RejectionReason,
             receipt?.TransactionReference,
+            receipt?.ReportedAmount,
             // el pago en persona guarda un marcador en lugar de imagen: no se manda a la web
             receipt is { HasImage: true } ? receipt.FileUrl : null,
             receipt?.UploadedAtUtc,

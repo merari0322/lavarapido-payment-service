@@ -55,7 +55,7 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
 
         // El monto lo calcula el servidor (total de la reserva menos cupones), nunca el navegador.
         var payment = Payment.ReportWithReceipt(booking.Id, account.Id, await _amountDue.ForAsync(booking, ct),
-            command.ReceiptImage, caller.UserId, command.TransactionReference, Now);
+            command.ReceiptImage, caller.UserId, command.TransactionReference, Now, command.ReportedAmount);
 
         _payments.Add(payment);
         return await CompleteAsync(payment, booking, ct);
@@ -89,6 +89,9 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
         // Aprobar acredita los puntos de la reserva: sin ella no se sabe a quién ni cuántos, así
         // que si booking-service no la encuentra la aprobación no sigue (404) en vez de quedar sin puntos.
         var booking = await _bookings.RequireForAdminAsync(payment.BookingId, ct);
+        // Si la reserva se canceló mientras el pago esperaba revisión, ya no se aprueba: se rechaza
+        // (o se devuelve el dinero por fuera) en lugar de acreditar puntos de una reserva que no fue.
+        _guard.EnsureBookingIsPayable(booking);
 
         var now = Now;
         payment.Approve(admin.UserId, now);

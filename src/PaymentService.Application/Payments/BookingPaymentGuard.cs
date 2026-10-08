@@ -31,11 +31,20 @@ public sealed class BookingPaymentGuard
     /// </summary>
     public async Task EnsureBookingIsUnpaidAsync(BookingInfo booking, bool allowOpenPayment, CancellationToken ct)
     {
-        if (!PaymentPolicy.IsBookingPayable(booking.Status))
-            throw new ConflictException(ErrorCodes.BookingNotPayable, "Esta reserva no se puede pagar en su estado actual.");
+        EnsureBookingIsPayable(booking);
         await EnsureNoApprovedPaymentAsync(booking.Id, ct);
         if (!allowOpenPayment && await _payments.HasOpenPaymentAsync(booking.Id, ct))
             throw new ConflictException(ErrorCodes.PaymentAlreadyReported, "La reserva ya tiene un pago en revisión.");
+    }
+
+    /// <summary>
+    /// La reserva sigue en un estado pagable. Se revisa al reportar y otra vez al aprobar: entre una
+    /// cosa y otra la reserva pudo cancelarse, y un pago aprobado acreditaría sus puntos.
+    /// </summary>
+    public void EnsureBookingIsPayable(BookingInfo booking)
+    {
+        if (!PaymentPolicy.IsBookingPayable(booking.Status))
+            throw new ConflictException(ErrorCodes.BookingNotPayable, "Esta reserva no se puede pagar en su estado actual.");
     }
 
     /// <summary>A lo sumo un pago aprobado por reserva (se valida antes de aprobar otro).</summary>

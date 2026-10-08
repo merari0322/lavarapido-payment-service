@@ -10,7 +10,11 @@ namespace PaymentService.Application.Payments;
 //     (opcional, con valor por defecto, en la ruta...) es asunto del adaptador; luego los traduce a
 //     Commands.
 
-/// <summary>Pago listo para mostrar: sus datos, el último comprobante, la cuenta y la reserva.</summary>
+/// <summary>
+/// Pago listo para mostrar: sus datos, el último comprobante, la cuenta y la reserva.
+/// Amount es lo que se espera cobrar; ReportedAmount, lo que el comprobante dice que se pagó (null
+/// si el cliente no lo indicó): el admin compara ambos antes de aprobar.
+/// </summary>
 public sealed record PaymentDto(
     long Id,
     string Status,
@@ -18,11 +22,22 @@ public sealed record PaymentDto(
     DateTime? ProcessedAtUtc,
     string? RejectionReason,
     string? TransactionReference,
+    decimal? ReportedAmount,
     string? ReceiptImage,
     DateTime? ReportedAtUtc,
     long? ReportedBy,
     PaymentAccountDto? Account,
     PaymentBookingDto? Booking);
+
+/// <summary>
+/// Lo que falta por pagar de una reserva: su total, lo ya descontado por cupones y la diferencia,
+/// que es exactamente el monto con el que se registra el pago.
+/// </summary>
+public sealed record AmountDueDto(
+    long BookingId,
+    decimal BookingTotal,
+    decimal AppliedDiscounts,
+    decimal AmountDue);
 
 /// <summary>Los datos de la reserva que se muestran junto al pago.</summary>
 public sealed record PaymentBookingDto(
@@ -37,12 +52,16 @@ public sealed record PaymentBookingDto(
     string Plate,
     long? OwnerUserId);
 
-/// <summary>El cliente reporta que pagó por QR: reserva, cuenta a la que pagó, referencia e imagen del comprobante.</summary>
+/// <summary>
+/// El cliente reporta que pagó por QR: reserva, cuenta a la que pagó, referencia, imagen del
+/// comprobante y, si lo indica, el monto que dice el comprobante.
+/// </summary>
 public sealed record ReportPaymentCommand(
     long BookingId,
     short PaymentAccountId,
     string? TransactionReference,
-    string ReceiptImage);
+    string ReceiptImage,
+    decimal? ReportedAmount = null);
 
 /// <summary>El admin registra un pago recibido en el lavadero.</summary>
 public sealed record RegisterInPersonPaymentCommand(

@@ -72,15 +72,18 @@ public sealed class Payment : AggregateRoot<long>
     /// <summary>
     /// Factory Method — el cliente pagó desde su banco (QR) y reporta el pago con el comprobante:
     /// queda en IN_REVIEW esperando que el admin lo apruebe o rechace.
+    /// amount es lo que el servidor espera cobrar; reportedAmount, lo que el cliente dice que pagó
+    /// según su comprobante (opcional). No se exige que coincidan: la diferencia la ve y decide el admin.
     /// </summary>
     public static Payment ReportWithReceipt(long bookingId, short paymentAccountId, decimal amount,
-        string receiptFile, long reportedBy, string? transactionReference, DateTime nowUtc)
+        string receiptFile, long reportedBy, string? transactionReference, DateTime nowUtc,
+        decimal? reportedAmount = null)
     {
         // El cliente siempre respalda su pago con la imagen del comprobante.
         Guard.Against(!ImageSource.IsImage(receiptFile), DomainErrorCodes.InvalidReceiptFile,
             "El comprobante debe ser una imagen.");
         var payment = Create(bookingId, paymentAccountId, amount);
-        payment.AttachReceipt(receiptFile, reportedBy, nowUtc, transactionReference, amount);
+        payment.AttachReceipt(receiptFile, reportedBy, nowUtc, transactionReference, reportedAmount);
         payment.SubmitForReview();
         return payment;
     }

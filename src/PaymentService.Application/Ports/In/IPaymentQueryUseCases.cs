@@ -20,4 +20,7 @@ public interface IPaymentQueryUseCases
 
     /// <summary>Cualquier pago, para el admin.</summary>
     Task<PaymentDto> GetAsync(long paymentId, CancellationToken ct);
+
+    /// <summary>Lo que falta por pagar de una reserva (el monto con el que quedaría un pago en caja).</summary>
+    Task<AmountDueDto> AmountDueAsync(long bookingId, CancellationToken ct);
 }

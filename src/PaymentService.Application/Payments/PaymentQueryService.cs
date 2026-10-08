@@ -19,12 +19,15 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
     private readonly IPaymentRepository _payments;
     private readonly IBookingDirectory _bookings;
     private readonly PaymentDtoAssembler _dtos;
+    private readonly AmountDueCalculator _amountDue;
 
-    public PaymentQueryService(IPaymentRepository payments, IBookingDirectory bookings, PaymentDtoAssembler dtos)
+    public PaymentQueryService(IPaymentRepository payments, IBookingDirectory bookings, PaymentDtoAssembler dtos,
+        AmountDueCalculator amountDue)
     {
         _payments = payments;
         _bookings = bookings;
         _dtos = dtos;
+        _amountDue = amountDue;
     }
 
     /// <inheritdoc />
@@ -68,5 +71,12 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
         var payment = await _payments.GetRequiredAsync(paymentId, ct);
         var booking = await _bookings.GetForAdminAsync(payment.BookingId, ct);
         return await _dtos.ToDtoAsync(payment, booking, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<AmountDueDto> AmountDueAsync(long bookingId, CancellationToken ct)
+    {
+        var booking = await _bookings.RequireForAdminAsync(bookingId, ct);
+        return await _amountDue.BreakdownAsync(booking, ct);
     }
 }

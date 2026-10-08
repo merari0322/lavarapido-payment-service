@@ -113,6 +113,32 @@ public class PaymentCommandServiceTests
     }
 
     [Fact]
+    public async Task Approve_WhenTheBookingWasCancelledWhileInReview_IsAConflictAndCreditsNoPoints()
+    {
+        var paymentId = await ReportedPaymentAsync();
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Status = "CANCELLED" };
+        var commitsBefore = _uow.Commits;
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() => _service.ApproveAsync(paymentId, Admin, default));
+
+        Assert.Equal(ErrorCodes.BookingNotPayable, error.Code);
+        Assert.Equal(PaymentStatus.InReview, (await _payments.GetByIdAsync(paymentId, default))!.Status);
+        Assert.Equal(commitsBefore, _uow.Commits);
+        Assert.Empty(_ledger.Saved);
+    }
+
+    [Fact]
+    public async Task Report_ShowsTheAdminWhatTheCustomerSaysTheyPaid()
+    {
+        var dto = await _service.ReportAsync(
+            new ReportPaymentCommand(BookingId, 1, null, "data:image/png;base64,AAA", ReportedAmount: 45_000m),
+            Customer, default);
+
+        Assert.Equal(50_000m, dto.Amount);
+        Assert.Equal(45_000m, dto.ReportedAmount);
+    }
+
+    [Fact]
     public async Task Approve_WhenTheBookingIsAlreadyPaid_IsAConflictAndLeavesThePaymentUntouched()
     {
         // El cliente reportó por QR y mientras tanto el admin registró el pago en persona.
