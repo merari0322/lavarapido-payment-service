@@ -30,6 +30,11 @@ public sealed class AdminPaymentsController : ControllerBase
     [HttpGet("{id:long}")]
     public Task<PaymentDto> Get(long id, CancellationToken ct) => _queries.GetAsync(id, ct);
 
+    /// <summary>Lo que falta por pagar de una reserva (total menos cupones): el monto de un pago en caja.</summary>
+    [HttpGet("amount-due")]
+    public Task<AmountDueDto> AmountDue([FromQuery] long bookingId, CancellationToken ct) =>
+        _queries.AmountDueAsync(bookingId, ct);
+
     /// <summary>Pago recibido en el lavadero: queda aprobado con lo que falta por pagar de la reserva.</summary>
     [HttpPost]
     public async Task<ActionResult<PaymentDto>> RegisterManual(ManualPaymentRequest request, CancellationToken ct)

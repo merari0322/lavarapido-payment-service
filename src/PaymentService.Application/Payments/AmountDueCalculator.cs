@@ -19,5 +19,12 @@ public sealed class AmountDueCalculator
     }
 
     public async Task<decimal> ForAsync(BookingInfo booking, CancellationToken ct) =>
-        PaymentPolicy.AmountDue(booking.Total, await _redemptions.AppliedDiscountTotalAsync(booking.Id, ct));
+        (await BreakdownAsync(booking, ct)).AmountDue;
+
+    /// <summary>La misma cifra con su desglose, para mostrarla antes de registrar el pago.</summary>
+    public async Task<AmountDueDto> BreakdownAsync(BookingInfo booking, CancellationToken ct)
+    {
+        var discounts = await _redemptions.AppliedDiscountTotalAsync(booking.Id, ct);
+        return new AmountDueDto(booking.Id, booking.Total, discounts, PaymentPolicy.AmountDue(booking.Total, discounts));
+    }
 }
