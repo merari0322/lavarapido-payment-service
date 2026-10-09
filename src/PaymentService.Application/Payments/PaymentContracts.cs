@@ -39,6 +39,16 @@ public sealed record AmountDueDto(
     decimal AppliedDiscounts,
     decimal AmountDue);
 
+/// <summary>
+/// Cómo va el pago de una reserva del cliente: el estado de su último pago (null si no tiene) y si
+/// todavía se puede pagar. Payable lo decide PaymentPolicy, así la web y la app solo muestran
+/// "Pagar" cuando payment-service aceptaría el reporte.
+/// </summary>
+public sealed record BookingPaymentStateDto(
+    long BookingId,
+    string? PaymentStatus,
+    bool Payable);
+
 /// <summary>Los datos de la reserva que se muestran junto al pago.</summary>
 public sealed record PaymentBookingDto(
     long Id,

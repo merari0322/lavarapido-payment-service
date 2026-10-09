@@ -41,6 +41,25 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<BookingPaymentStateDto>> MyBookingsAsync(CancellationToken ct)
+    {
+        var bookings = await _bookings.MineAsync(ct);
+        if (bookings.Count == 0) return Array.Empty<BookingPaymentStateDto>();
+
+        var payments = (await _payments.ListForBookingsAsync(bookings.Select(b => b.Id).ToList(), ct))
+            .ToLookup(p => p.BookingId);
+        return bookings
+            .Select(booking =>
+            {
+                var ofBooking = payments[booking.Id].ToList();
+                var latest = ofBooking.MaxBy(p => p.Id);
+                return new BookingPaymentStateDto(booking.Id, latest?.Status.ToCode(),
+                    PaymentPolicy.CanReportPayment(booking.Status, ofBooking.Select(p => p.Status)));
+            })
+            .ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<PaymentDto> GetMineAsync(long paymentId, CancellationToken ct)
     {
         var payment = await _payments.GetRequiredAsync(paymentId, ct);

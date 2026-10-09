@@ -15,6 +15,9 @@ public interface IPaymentQueryUseCases
     /// <summary>Un pago del cliente que llama (404 si la reserva no es suya).</summary>
     Task<PaymentDto> GetMineAsync(long paymentId, CancellationToken ct);
 
+    /// <summary>Cada reserva del cliente que llama con el estado de su último pago y si se puede pagar.</summary>
+    Task<IReadOnlyList<BookingPaymentStateDto>> MyBookingsAsync(CancellationToken ct);
+
     /// <summary>Cola de revisión del admin, opcionalmente filtrada por estado (PENDING, IN_REVIEW...).</summary>
     Task<IReadOnlyList<PaymentDto>> ListAsync(string? status, CancellationToken ct);
 

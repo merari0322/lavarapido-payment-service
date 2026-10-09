@@ -50,6 +50,14 @@ public sealed class PaymentsController : ControllerBase
     [Authorize(Roles = "CLIENT")]
     public Task<IReadOnlyList<PaymentDto>> Mine(CancellationToken ct) => _queries.MineAsync(ct);
 
+    /// <summary>
+    /// Cada reserva del cliente con el estado de su último pago y si todavía se puede pagar: el
+    /// historial muestra "Pagar" con este dato, sin repetir la regla en la web ni en la app.
+    /// </summary>
+    [HttpGet("payments/me/bookings")]
+    [Authorize(Roles = "CLIENT")]
+    public Task<IReadOnlyList<BookingPaymentStateDto>> MyBookings(CancellationToken ct) => _queries.MyBookingsAsync(ct);
+
     /// <summary>Un pago propio (404 si no existe o es de otra persona).</summary>
     [HttpGet("payments/{id:long}")]
     [Authorize(Roles = "CLIENT")]
