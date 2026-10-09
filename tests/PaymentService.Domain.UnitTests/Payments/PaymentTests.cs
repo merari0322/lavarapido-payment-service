@@ -1,11 +1,14 @@
-﻿using PaymentService.Domain.Common;
+using PaymentService.Domain.Common;
 using PaymentService.Domain.Payments;
 using Xunit;
 
 namespace PaymentService.Domain.UnitTests.Payments;
+
 public class PaymentTests
 {
     private const string Url = "https://archivos/comprobante1.jpg";
+    private const long Admin = 9;
+    private static readonly DateTime Now = new(2026, 10, 8, 15, 30, 0, DateTimeKind.Utc);
 
     private static Payment PendingPayment() =>
         Payment.Create(bookingId: 10, paymentAccountId: 1, amount: 150.50m);
@@ -13,7 +16,7 @@ public class PaymentTests
     private static Payment InReviewPayment()
     {
         var payment = PendingPayment();
-        payment.AttachReceipt(Url, uploadedBy: 5);
+        payment.AttachReceipt(Url, uploadedBy: 5, nowUtc: Now);
         payment.SubmitForReview();
         return payment;
     }
@@ -21,7 +24,7 @@ public class PaymentTests
     private static Payment ApprovedPayment()
     {
         var payment = InReviewPayment();
-        payment.Approve(approvedBy: 9);
+        payment.Approve(Admin, Now);
         return payment;
     }
 
@@ -63,6 +66,55 @@ public class PaymentTests
         Assert.Equal(150.50m, payment.Amount);
     }
 
+    // ---- Factory methods ----
+
+    [Fact]
+    public void ReportWithReceipt_LeavesPaymentInReviewWithItsReceipt()
+    {
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, " REF-1 ", Now,
+            reportedAmount: 75m);
+
+        Assert.Equal(PaymentStatus.InReview, payment.Status);
+        Assert.Equal(80m, payment.Amount);
+        var receipt = Assert.Single(payment.Receipts);
+        Assert.Equal("REF-1", receipt.TransactionReference);
+        Assert.Equal(75m, receipt.ReportedAmount);
+        Assert.True(receipt.HasImage);
+    }
+
+    [Fact]
+    public void ReportWithReceipt_WithoutReportedAmount_DoesNotPretendTheReceiptMatches()
+    {
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, null, Now);
+
+        Assert.Null(Assert.Single(payment.Receipts).ReportedAmount);
+    }
+
+    [Theory]
+    [InlineData("no-es-imagen")]
+    [InlineData("https://sitio-del-cliente.com/comprobante.png")]
+    [InlineData("data:image/svg+xml;base64,PHN2Zz4=")]
+    [InlineData("data:text/html;base64,PGh0bWw+")]
+    [InlineData("data:image/png;base64,")]
+    public void ReportWithReceipt_WhenFileIsNotAnAllowedImage_ThrowsDomainException(string file)
+    {
+        var error = Assert.Throws<DomainException>(() =>
+            Payment.ReportWithReceipt(10, 2, 80m, file, reportedBy: 5, null, Now));
+
+        Assert.Equal("INVALID_RECEIPT_FILE", error.Code);
+    }
+
+    [Fact]
+    public void RegisterInPerson_IsApprovedByTheAdminWithoutImage()
+    {
+        var payment = Payment.RegisterInPerson(10, 1, 80m, registeredBy: Admin, transactionReference: null, nowUtc: Now);
+
+        Assert.Equal(PaymentStatus.Approved, payment.Status);
+        Assert.Equal(Admin, payment.ApprovedBy);
+        Assert.False(payment.LatestReceipt!.HasImage);
+        Assert.Contains(payment.DomainEvents, e => e is PaymentApproved);
+    }
+
     // ---- Comprobantes ----
 
     [Fact]
@@ -70,13 +122,14 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        payment.AttachReceipt(Url, uploadedBy: 5, transactionReference: "REF123", reportedAmount: 150.50m);
+        payment.AttachReceipt(Url, uploadedBy: 5, nowUtc: Now, transactionReference: "REF123", reportedAmount: 150.50m);
 
         var receipt = Assert.Single(payment.Receipts);
         Assert.Equal(Url, receipt.FileUrl);
         Assert.Equal(5, receipt.UploadedBy);
         Assert.Equal("REF123", receipt.TransactionReference);
         Assert.Equal(150.50m, receipt.ReportedAmount);
+        Assert.Null(receipt.ReviewedBy);
     }
 
     [Theory]
@@ -87,7 +140,7 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        Assert.Throws<DomainException>(() => payment.AttachReceipt(fileUrl!, uploadedBy: 5));
+        Assert.Throws<DomainException>(() => payment.AttachReceipt(fileUrl!, uploadedBy: 5, nowUtc: Now));
     }
 
     [Theory]
@@ -97,7 +150,7 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        Assert.Throws<DomainException>(() => payment.AttachReceipt(Url, uploadedBy));
+        Assert.Throws<DomainException>(() => payment.AttachReceipt(Url, uploadedBy, Now));
     }
 
     [Theory]
@@ -108,7 +161,16 @@ public class PaymentTests
         var payment = PendingPayment();
 
         Assert.Throws<DomainException>(() =>
-            payment.AttachReceipt(Url, uploadedBy: 5, reportedAmount: (decimal)amount));
+            payment.AttachReceipt(Url, uploadedBy: 5, nowUtc: Now, reportedAmount: (decimal)amount));
+    }
+
+    [Fact]
+    public void AttachReceipt_WithTooLongReference_ThrowsDomainException()
+    {
+        var payment = PendingPayment();
+
+        Assert.Throws<DomainException>(() =>
+            payment.AttachReceipt(Url, uploadedBy: 5, nowUtc: Now, transactionReference: new string('x', 101)));
     }
 
     [Fact]
@@ -116,7 +178,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        Assert.Throws<DomainException>(() => payment.AttachReceipt("https://archivos/otro.jpg", uploadedBy: 5));
+        Assert.Throws<DomainException>(() => payment.AttachReceipt("https://archivos/otro.jpg", uploadedBy: 5, nowUtc: Now));
     }
 
     // ---- Enviar a revisión ----
@@ -125,7 +187,7 @@ public class PaymentTests
     public void SubmitForReview_WithReceipt_MovesToInReview()
     {
         var payment = PendingPayment();
-        payment.AttachReceipt(Url, uploadedBy: 5);
+        payment.AttachReceipt(Url, uploadedBy: 5, nowUtc: Now);
 
         payment.SubmitForReview();
 
@@ -147,7 +209,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        payment.Approve(approvedBy: 9);
+        payment.Approve(Admin, Now);
 
         Assert.Equal(PaymentStatus.Approved, payment.Status);
     }
@@ -157,7 +219,7 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        Assert.Throws<DomainException>(() => payment.Approve(approvedBy: 9));
+        Assert.Throws<DomainException>(() => payment.Approve(Admin, Now));
     }
 
     [Theory]
@@ -167,7 +229,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        Assert.Throws<DomainException>(() => payment.Approve(approvedBy));
+        Assert.Throws<DomainException>(() => payment.Approve(approvedBy, Now));
     }
 
     [Fact]
@@ -175,10 +237,22 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        payment.Approve(approvedBy: 9);
+        payment.Approve(Admin, Now);
 
-        Assert.Equal(9, payment.ApprovedBy);
+        Assert.Equal(Admin, payment.ApprovedBy);
         Assert.NotNull(payment.ProcessedAtUtc);
+    }
+
+    [Fact]
+    public void Approve_MarksTheReceiptAsReviewed()
+    {
+        var payment = InReviewPayment();
+
+        payment.Approve(Admin, Now);
+
+        var receipt = payment.LatestReceipt!;
+        Assert.Equal(Admin, receipt.ReviewedBy);
+        Assert.NotNull(receipt.ReviewedAtUtc);
     }
 
     // ---- Rechazar ----
@@ -188,7 +262,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        payment.Reject("El comprobante no es legible.");
+        payment.Reject(Admin, "El comprobante no es legible.", Now);
 
         Assert.Equal(PaymentStatus.Rejected, payment.Status);
     }
@@ -201,7 +275,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        Assert.Throws<DomainException>(() => payment.Reject(reason!));
+        Assert.Throws<DomainException>(() => payment.Reject(Admin, reason!, Now));
     }
 
     [Fact]
@@ -209,7 +283,7 @@ public class PaymentTests
     {
         var payment = InReviewPayment();
 
-        Assert.Throws<DomainException>(() => payment.Reject(new string('x', 201)));
+        Assert.Throws<DomainException>(() => payment.Reject(Admin, new string('x', 201), Now));
     }
 
     [Fact]
@@ -217,18 +291,21 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        Assert.Throws<DomainException>(() => payment.Reject("Motivo válido."));
+        Assert.Throws<DomainException>(() => payment.Reject(Admin, "Motivo válido.", Now));
     }
 
     [Fact]
-    public void Reject_StoresReasonAndProcessedAt()
+    public void Reject_StoresReasonAndReviewOnTheReceipt()
     {
         var payment = InReviewPayment();
 
-        payment.Reject("El comprobante no es legible.");
+        payment.Reject(Admin, "  El comprobante no es legible.  ", Now);
 
         Assert.Equal("El comprobante no es legible.", payment.RejectionReason);
         Assert.NotNull(payment.ProcessedAtUtc);
+        Assert.Null(payment.ApprovedBy);
+        Assert.Equal(Admin, payment.LatestReceipt!.ReviewedBy);
+        Assert.Equal("El comprobante no es legible.", payment.LatestReceipt.ReviewComment);
     }
 
     // ---- Reembolsar ----
@@ -238,7 +315,7 @@ public class PaymentTests
     {
         var payment = ApprovedPayment();
 
-        payment.Refund();
+        payment.Refund(Now);
 
         Assert.Equal(PaymentStatus.Refunded, payment.Status);
     }
@@ -248,29 +325,32 @@ public class PaymentTests
     {
         var payment = PendingPayment();
 
-        Assert.Throws<DomainException>(() => payment.Refund());
+        Assert.Throws<DomainException>(() => payment.Refund(Now));
     }
 
     // ---- Eventos de dominio ----
 
     [Fact]
-    public void Approve_RaisesPaymentApprovedEvent()
+    public void Approve_RaisesPaymentApprovedEventWithBookingAndAmount()
     {
         var payment = InReviewPayment();
 
-        payment.Approve(approvedBy: 9);
+        payment.Approve(Admin, Now);
 
-        Assert.Contains(payment.DomainEvents, e => e is PaymentApproved);
+        var approved = Assert.IsType<PaymentApproved>(Assert.Single(payment.DomainEvents));
+        Assert.Equal(10, approved.BookingId);
+        Assert.Equal(150.50m, approved.Amount);
     }
 
     [Fact]
-    public void Reject_RaisesPaymentRejectedEvent()
+    public void Reject_RaisesPaymentRejectedEventWithReason()
     {
         var payment = InReviewPayment();
 
-        payment.Reject("Motivo válido.");
+        payment.Reject(Admin, "Motivo válido.", Now);
 
-        Assert.Contains(payment.DomainEvents, e => e is PaymentRejected);
+        var rejected = Assert.IsType<PaymentRejected>(Assert.Single(payment.DomainEvents));
+        Assert.Equal("Motivo válido.", rejected.Reason);
     }
 
     [Fact]
@@ -278,8 +358,47 @@ public class PaymentTests
     {
         var payment = ApprovedPayment();
 
-        payment.Refund();
+        payment.Refund(Now);
 
         Assert.Contains(payment.DomainEvents, e => e is PaymentRefunded);
+    }
+
+    // ---- Códigos de estado ----
+
+    [Theory]
+    [InlineData("pending", PaymentStatus.Pending)]
+    [InlineData(" IN_REVIEW ", PaymentStatus.InReview)]
+    [InlineData("Approved", PaymentStatus.Approved)]
+    public void StatusCodes_ParseIgnoresCaseAndSpaces(string code, PaymentStatus expected)
+    {
+        Assert.Equal(expected, PaymentStatusCodes.Parse(code));
+    }
+
+    [Fact]
+    public void StatusCodes_ParseUnknownCode_ThrowsDomainException()
+    {
+        Assert.Throws<DomainException>(() => PaymentStatusCodes.Parse("PAGADO"));
+    }
+
+    // ---- Fechas (el aggregate usa el "ahora" que recibe, nunca el reloj del sistema) ----
+
+    [Fact]
+    public void Approve_UsesTheGivenTimeForProcessingReviewAndEvent()
+    {
+        var payment = InReviewPayment();
+
+        payment.Approve(Admin, Now);
+
+        Assert.Equal(Now, payment.ProcessedAtUtc);
+        Assert.Equal(Now, payment.LatestReceipt!.ReviewedAtUtc);
+        Assert.Equal(Now, Assert.Single(payment.DomainEvents).OccurredOnUtc);
+    }
+
+    [Fact]
+    public void ReportWithReceipt_StampsTheReceiptWithTheGivenTime()
+    {
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, null, Now);
+
+        Assert.Equal(Now, payment.LatestReceipt!.UploadedAtUtc);
     }
 }

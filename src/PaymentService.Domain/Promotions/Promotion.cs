@@ -1,0 +1,205 @@
+using PaymentService.Domain.Common;
+using PaymentService.Domain.Promotions.Discounts;
+
+namespace PaymentService.Domain.Promotions;
+
+/// <summary>
+/// Aggregate root de una promoción. Es un cupón real: al canjearla en el pago descuenta según su
+/// tipo (Strategy, ver Discounts/) sobre lo que falta por pagar de la reserva. Para mostrarla tiene
+/// ícono y beneficios; el precio de referencia y la duración del paquete son opcionales (las
+/// pantallas ya no los piden porque el cupón no los usa).
+///
+/// Reglas del canje (Redeem): vigencia y activa, puntos de fidelización suficientes (RequiredPoints),
+/// compra mínima, una sola vez por reserva y los límites de usos total y por cliente. El número de
+/// usos no se guarda aquí: se deriva contando los canjes (PromotionRedemption), para no tener un
+/// segundo contador que se desincronice.
+///
+/// Reglas que no se modelan a propósito: promoción privada, mínimo de reservas completadas y
+/// restricción por cliente o por servicio. Evaluarlas requiere datos de customer-service y
+/// booking-service que hoy no se exponen; toda promoción se comporta como pública y sin
+/// restricciones, que es exactamente el comportamiento actual.
+/// </summary>
+public sealed class Promotion : AggregateRoot<int>
+{
+    private const int MaxCodeLength = 30;
+    private const int MaxNameLength = 100;
+    private const int MaxDescriptionLength = 300;
+    private const int MaxIconLength = 40;
+    private const int MaxBenefitsLength = 600;
+
+    private Promotion() { }
+
+    public string Code { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
+    public string? Description { get; private set; }
+
+    /// <summary>Precio de referencia del paquete (opcional; el descuento real no lo usa).</summary>
+    public decimal? Price { get; private set; }
+
+    /// <summary>Duración de referencia del paquete en minutos (opcional).</summary>
+    public int? DurationMinutes { get; private set; }
+    public string? Icon { get; private set; }
+    public bool Featured { get; private set; }
+
+    // "Sin beneficios" se guarda como ausencia de valor (null) en este campo, que es el que se
+    // persiste; la propiedad pública lo expone siempre como lista (vacía si no hay).
+    private IReadOnlyList<string>? _benefits;
+
+    /// <summary>Una línea por beneficio; es solo texto para mostrar.</summary>
+    public IReadOnlyList<string> Benefits
+    {
+        get => _benefits ?? Array.Empty<string>();
+        private set => _benefits = value.Count == 0 ? null : value;
+    }
+
+    public DateOnly ValidFrom { get; private set; }
+    public DateOnly ValidTo { get; private set; }
+    public bool IsActive { get; private set; }
+
+    public DiscountType DiscountType { get; private set; }
+
+    /// <summary>Porcentaje o monto en pesos, según DiscountType.</summary>
+    public decimal DiscountValue { get; private set; }
+
+    /// <summary>Tope en pesos de un descuento porcentual (opcional).</summary>
+    public decimal? MaxDiscountAmount { get; private set; }
+
+    /// <summary>Compra mínima para poder canjearla (0 = sin mínimo).</summary>
+    public decimal MinPurchaseAmount { get; private set; }
+
+    /// <summary>Usos totales permitidos (null = sin límite).</summary>
+    public int? MaxRedemptions { get; private set; }
+
+    /// <summary>Usos permitidos por cliente (null = sin límite).</summary>
+    public int? MaxRedemptionsPerCustomer { get; private set; }
+
+    /// <summary>Puntos acumulados que el cliente necesita para desbloquearla (0 = no depende de puntos).</summary>
+    public int RequiredPoints { get; private set; }
+
+    /// <summary>
+    /// El porcentaje como entero, para la web y la app (contrato previo de la API). Para descuentos
+    /// que no son porcentuales vale 0; el valor real está en DiscountValue.
+    /// </summary>
+    public int DiscountPercent =>
+        DiscountType == DiscountType.Percentage ? (int)Math.Round(DiscountValue, MidpointRounding.AwayFromZero) : 0;
+
+    // ------------------------------------------------------------------ ciclo de vida
+
+    /// <summary>Factory Method: una promoción nueva nace activa y sin límites de uso.</summary>
+    public static Promotion Create(PromotionDefinition definition)
+    {
+        var promotion = new Promotion { IsActive = true };
+        promotion.Apply(definition);
+        return promotion;
+    }
+
+    /// <summary>Reemplaza lo que el admin define; los límites de uso y la compra mínima se conservan.</summary>
+    public void Update(PromotionDefinition definition) => Apply(definition);
+
+    /// <summary>Pausa o reanuda la promoción sin borrarla.</summary>
+    public void SetActive(bool active) => IsActive = active;
+
+    /// <summary>active / scheduled / paused para la pantalla del admin (se deriva, no se guarda).</summary>
+    public string StatusFor(DateOnly today)
+    {
+        if (!IsActive) return "paused";
+        return ValidFrom > today ? "scheduled" : "active";
+    }
+
+    /// <summary>Activa y dentro de su rango de fechas.</summary>
+    public bool IsAvailableOn(DateOnly today) => IsActive && today >= ValidFrom && today <= ValidTo;
+
+    /// <summary>El cliente ya tiene los puntos que pide.</summary>
+    public bool IsUnlockedFor(int customerPoints) => customerPoints >= RequiredPoints;
+
+    /// <summary>
+    /// Pasar de pointsBefore a pointsAfter la desbloquea hoy: está vigente y el saldo cruzó los
+    /// puntos que pide. Una promoción de 0 puntos nunca "se desbloquea" porque ya estaba disponible.
+    /// </summary>
+    public bool IsUnlockedBy(int pointsBefore, int pointsAfter, DateOnly today) =>
+        IsAvailableOn(today) && !IsUnlockedFor(pointsBefore) && IsUnlockedFor(pointsAfter);
+
+    // ------------------------------------------------------------------ canje
+
+    /// <summary>
+    /// Descuento en pesos sobre ese subtotal: lo calcula la estrategia del tipo y luego se aplican
+    /// los topes (MaxDiscountAmount y nunca más que el propio subtotal), redondeado a centavos.
+    /// </summary>
+    public decimal CalculateDiscount(decimal subtotal)
+    {
+        if (subtotal <= 0) return 0m;
+        var discount = DiscountStrategyFactory.For(DiscountType).Calculate(subtotal, DiscountValue);
+        if (MaxDiscountAmount is { } cap) discount = Math.Min(discount, cap);
+        discount = Math.Min(discount, subtotal);
+        return Math.Round(discount, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Valida todas las reglas del canje y, si se cumplen, devuelve el registro del canje con el
+    /// monto congelado y registra el evento PromotionRedeemed. Cada regla tiene su propio mensaje
+    /// para que el cliente sepa por qué no pudo.
+    ///
+    /// El evento también marca que la promoción cambió (consumió un uso): al guardarse, dos canjes
+    /// simultáneos de la misma promoción chocan entre sí y los límites de uso no se pueden saltar.
+    /// </summary>
+    public PromotionRedemption Redeem(RedemptionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Guard.Against(!IsAvailableOn(request.Today), DomainErrorCodes.PromotionNotRedeemable, "Ese cupón no está vigente.");
+        Guard.Against(!IsUnlockedFor(request.CustomerPoints), DomainErrorCodes.PromotionNotRedeemable,
+            "Todavía no acumulas los puntos necesarios para desbloquear ese cupón.");
+        Guard.Against(request.AlreadyRedeemedOnBooking, DomainErrorCodes.PromotionAlreadyRedeemed, "Ya canjeaste este cupón en esta reserva.");
+        Guard.Against(request.Subtotal < MinPurchaseAmount, DomainErrorCodes.PromotionMinPurchaseNotMet,
+            $"Este cupón exige una compra mínima de {MinPurchaseAmount:N0}.");
+        Guard.Against(MaxRedemptions is { } total && request.TotalRedemptions >= total, DomainErrorCodes.PromotionExhausted,
+            "Este cupón ya alcanzó su número máximo de usos.");
+        Guard.Against(MaxRedemptionsPerCustomer is { } perCustomer && request.CustomerRedemptions >= perCustomer,
+            DomainErrorCodes.PromotionCustomerLimitReached, "Ya usaste este cupón el máximo de veces permitido.");
+
+        var redemption = PromotionRedemption.Create(request.BookingId, Id, CalculateDiscount(request.Subtotal),
+            request.CustomerUserId, request.NowUtc);
+        AddDomainEvent(new PromotionRedeemed(Id, Code, Name, request.BookingId, request.BookingCode,
+            request.CustomerUserId, redemption.AppliedAmount, request.NowUtc));
+        return redemption;
+    }
+
+    // ------------------------------------------------------------------ validación
+
+    private void Apply(PromotionDefinition d)
+    {
+        // opcionales: si vienen, tienen que tener sentido
+        Guard.Against(d.Price is { } price && price <= 0, DomainErrorCodes.InvalidPromotionPrice,
+            "El precio debe ser mayor a cero.");
+        Guard.Against(d.DurationMinutes is { } minutes && minutes <= 0, DomainErrorCodes.InvalidPromotionDuration,
+            "La duración debe ser mayor a cero.");
+        Guard.Against(d.ValidTo < d.ValidFrom, DomainErrorCodes.InvalidPromotionRange, "La fecha de fin no puede ser anterior a la de inicio.");
+        Guard.Against(d.RequiredPoints < 0, DomainErrorCodes.InvalidPromotionRequiredPoints, "Los puntos requeridos no pueden ser negativos.");
+        // La estrategia del tipo sabe qué valores son válidos para ella (y rechaza PACKAGE).
+        DiscountStrategyFactory.For(d.DiscountType).Validate(d.DiscountValue);
+
+        var benefits = (d.Benefits ?? Array.Empty<string>())
+            .Select(b => b.Trim())
+            .Where(b => b.Length > 0)
+            .ToList();
+        Guard.Against(string.Join('\n', benefits).Length > MaxBenefitsLength, DomainErrorCodes.InvalidPromotionBenefits,
+            $"Los beneficios no pueden superar {MaxBenefitsLength} caracteres en total.");
+
+        Code = Guard.Required(d.Code, MaxCodeLength, DomainErrorCodes.InvalidPromotionCode,
+            $"El código es obligatorio y no puede superar {MaxCodeLength} caracteres.").ToUpperInvariant();
+        Name = Guard.Required(d.Name, MaxNameLength, DomainErrorCodes.InvalidPromotionName,
+            $"El nombre es obligatorio y no puede superar {MaxNameLength} caracteres.");
+        Description = Guard.Optional(d.Description, MaxDescriptionLength, DomainErrorCodes.InvalidPromotionDescription,
+            $"La descripción no puede superar {MaxDescriptionLength} caracteres.");
+        Icon = Guard.Optional(d.Icon, MaxIconLength, DomainErrorCodes.InvalidPromotionIcon,
+            $"El ícono no puede superar {MaxIconLength} caracteres.");
+        Price = d.Price;
+        DurationMinutes = d.DurationMinutes;
+        Featured = d.Featured;
+        Benefits = benefits;
+        ValidFrom = d.ValidFrom;
+        ValidTo = d.ValidTo;
+        DiscountType = d.DiscountType;
+        DiscountValue = d.DiscountValue;
+        RequiredPoints = d.RequiredPoints;
+    }
+}
