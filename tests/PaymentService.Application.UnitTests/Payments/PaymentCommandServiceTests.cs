@@ -8,6 +8,7 @@ using PaymentService.Application.UnitTests.Fakes;
 using PaymentService.Domain.Loyalty;
 using PaymentService.Domain.PaymentAccounts;
 using PaymentService.Domain.Payments;
+using PaymentService.Domain.Promotions;
 using Xunit;
 
 namespace PaymentService.Application.UnitTests.Payments;
@@ -26,6 +27,7 @@ public class PaymentCommandServiceTests
     private readonly FakeLedger _ledger;
     private readonly FakeRedemptionRepository _redemptions;
     private readonly FakeBookingDirectory _bookings = new();
+    private readonly FakePromotionRepository _promotions = new();
     private readonly RecordingPublisher _events = new();
     private readonly PaymentCommandService _service;
 
@@ -35,7 +37,7 @@ public class PaymentCommandServiceTests
         _ledger = new FakeLedger(_uow);
         _redemptions = new FakeRedemptionRepository(_uow);
         _service = new PaymentCommandService(_payments, _bookings, new BookingPaymentGuard(_payments, _accounts),
-            new AmountDueCalculator(_redemptions), new LoyaltyRewardService(_ledger), _uow, _events,
+            new AmountDueCalculator(_redemptions), new LoyaltyRewardService(_ledger, _promotions), _uow, _events,
             new PaymentDtoAssembler(new PaymentAccountReader(_accounts)), new FixedClock());
 
         _bookings.Bookings[BookingId] = new BookingInfo(BookingId, "RES-7", "CONFIRMED", 50_000m, "2026-10-08", "10:00",
@@ -91,10 +93,55 @@ public class PaymentCommandServiceTests
 
         Assert.Equal("APPROVED", dto.Status);
         Assert.Equal(BookingPoints, _ledger.BalanceOf(CustomerId));
-        var published = Assert.Single(_events.Published);
-        Assert.Equal("payment.confirmed", published.RoutingKey);
-        Assert.Equal(FixedClock.Now, published.OccurredOnUtc);
+        // primero el pago, después los puntos que ganó
+        Assert.Equal(new[] { "payment.confirmed", "payment.loyalty_points_earned" },
+            _events.Published.Select(e => e.RoutingKey));
+        Assert.All(_events.Published, e => Assert.Equal(FixedClock.Now, e.OccurredOnUtc));
         Assert.Empty((await _payments.GetByIdAsync(paymentId, default))!.DomainEvents);
+    }
+
+    [Fact]
+    public async Task Approve_TellsHowManyPointsWereEarnedAndWhichCouponsTheyUnlocked()
+    {
+        var today = DateOnly.FromDateTime(FixedClock.Now);
+        Promotion Coupon(string code, int points) => Promotion.Create(new PromotionDefinition(code, "Cupón " + code, null,
+            null, null, null, false, Array.Empty<string>(), today.AddDays(-1), today.AddDays(30),
+            DiscountType.Percentage, 10m, points));
+        _promotions.Add(Coupon("GRATIS0", 0));      // no pide puntos: no se "desbloquea"
+        _promotions.Add(Coupon("LAVA20", 20));      // 0 -> 25 la desbloquea
+        _promotions.Add(Coupon("VIP100", 100));     // todavía no
+        var paymentId = await ReportedPaymentAsync();
+
+        await _service.ApproveAsync(paymentId, Admin, default);
+
+        var earned = Assert.Single(_events.Published, e => e.RoutingKey == "payment.loyalty_points_earned");
+        Assert.Equal("LoyaltyPointsEarned", earned.EventType);
+        Assert.Equal(CustomerId, earned.Payload["customerUserId"]);
+        Assert.Equal("RES-7", earned.Payload["bookingCode"]);
+        Assert.Equal(BookingPoints, earned.Payload["points"]);
+        Assert.Equal(BookingPoints, earned.Payload["balance"]);
+        var unlocked = Assert.Single((IEnumerable<Dictionary<string, object?>>)earned.Payload["unlockedPromotions"]!);
+        Assert.Equal("LAVA20", unlocked["code"]);
+        Assert.Equal(10, unlocked["discountPercent"]);
+    }
+
+    [Fact]
+    public async Task Approve_WhenTheBookingEarnsNoPoints_PublishesOnlyTheConfirmation()
+    {
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { TotalLoyaltyPoints = 0 };
+        var paymentId = await ReportedPaymentAsync();
+
+        await _service.ApproveAsync(paymentId, Admin, default);
+
+        Assert.Equal("payment.confirmed", Assert.Single(_events.Published).RoutingKey);
+    }
+
+    [Fact]
+    public async Task RegisterInPerson_AlsoPublishesThePointsEarned()
+    {
+        await _service.RegisterInPersonAsync(new RegisterInPersonPaymentCommand(BookingId, 1, null), Admin, default);
+
+        Assert.Contains(_events.Published, e => e.RoutingKey == "payment.loyalty_points_earned");
     }
 
     [Fact]

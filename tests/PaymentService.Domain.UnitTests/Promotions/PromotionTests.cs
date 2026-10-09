@@ -11,8 +11,8 @@ public class PromotionTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(Now);
 
     private static PromotionDefinition Definition(DiscountType type = DiscountType.Percentage, decimal value = 10m,
-        int requiredPoints = 0) =>
-        new("verano10", "Verano", null, 50_000m, 60, null, false, new[] { " Lavado ", "", "Encerado" },
+        int requiredPoints = 0, decimal? price = 50_000m, int? duration = 60) =>
+        new("verano10", "Verano", null, price, duration, null, false, new[] { " Lavado ", "", "Encerado" },
             Today.AddDays(-1), Today.AddDays(30), type, value, requiredPoints);
 
     private static RedemptionRequest Request(decimal subtotal = 40_000m, int points = 0, bool alreadyRedeemed = false,
@@ -34,6 +34,54 @@ public class PromotionTests
         Assert.Equal(new[] { "Lavado", "Encerado" }, promotion.Benefits);
         Assert.True(promotion.IsActive);
         Assert.Equal(10, promotion.DiscountPercent);
+    }
+
+    [Fact]
+    public void Create_WithoutReferencePriceOrDuration_IsAValidCoupon()
+    {
+        var promotion = Promotion.Create(Definition(price: null, duration: null));
+
+        Assert.Null(promotion.Price);
+        Assert.Null(promotion.DurationMinutes);
+        Assert.Equal(4_000m, promotion.CalculateDiscount(40_000m));
+    }
+
+    [Theory]
+    [InlineData(0, 60)]
+    [InlineData(50_000, 0)]
+    public void Create_WithAReferencePriceOrDurationThatIsNotPositive_ThrowsDomainException(int price, int duration)
+    {
+        Assert.Throws<DomainException>(() => Promotion.Create(Definition(price: price, duration: duration)));
+    }
+
+    // ---- Desbloqueo por puntos ----
+
+    [Theory]
+    [InlineData(20, 30, true)]   // cruza los 30 que pide
+    [InlineData(20, 45, true)]   // los pasa de largo
+    [InlineData(30, 40, false)]  // ya la tenía desbloqueada
+    [InlineData(10, 25, false)]  // todavía no llega
+    public void IsUnlockedBy_IsTrueOnlyWhenTheBalanceCrossesTheRequiredPoints(int before, int after, bool expected)
+    {
+        var promotion = Promotion.Create(Definition(requiredPoints: 30));
+
+        Assert.Equal(expected, promotion.IsUnlockedBy(before, after, Today));
+    }
+
+    [Fact]
+    public void IsUnlockedBy_IgnoresPausedOrNotYetValidPromotions()
+    {
+        var paused = Promotion.Create(Definition(requiredPoints: 30));
+        paused.SetActive(false);
+
+        Assert.False(paused.IsUnlockedBy(20, 30, Today));
+        Assert.False(Promotion.Create(Definition(requiredPoints: 30)).IsUnlockedBy(20, 30, Today.AddDays(-5)));
+    }
+
+    [Fact]
+    public void IsUnlockedBy_APromotionWithoutRequiredPointsIsNeverNewlyUnlocked()
+    {
+        Assert.False(Promotion.Create(Definition(requiredPoints: 0)).IsUnlockedBy(0, 10, Today));
     }
 
     [Theory]

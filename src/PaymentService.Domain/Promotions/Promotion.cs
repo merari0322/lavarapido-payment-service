@@ -4,9 +4,10 @@ using PaymentService.Domain.Promotions.Discounts;
 namespace PaymentService.Domain.Promotions;
 
 /// <summary>
-/// Aggregate root de una promoción. Se muestra como paquete (precio de
-/// referencia, duración, ícono, beneficios) y es también un cupón real: al canjearla en el pago
-/// descuenta según su tipo (Strategy, ver Discounts/) sobre lo que falta por pagar de la reserva.
+/// Aggregate root de una promoción. Es un cupón real: al canjearla en el pago descuenta según su
+/// tipo (Strategy, ver Discounts/) sobre lo que falta por pagar de la reserva. Para mostrarla tiene
+/// ícono y beneficios; el precio de referencia y la duración del paquete son opcionales (las
+/// pantallas ya no los piden porque el cupón no los usa).
 ///
 /// Reglas del canje (Redeem): vigencia y activa, puntos de fidelización suficientes (RequiredPoints),
 /// compra mínima, una sola vez por reserva y los límites de usos total y por cliente. El número de
@@ -32,10 +33,11 @@ public sealed class Promotion : AggregateRoot<int>
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
 
-    /// <summary>Precio de referencia del paquete que se muestra en la pantalla de promociones.</summary>
-    public decimal Price { get; private set; }
+    /// <summary>Precio de referencia del paquete (opcional; el descuento real no lo usa).</summary>
+    public decimal? Price { get; private set; }
 
-    public int DurationMinutes { get; private set; }
+    /// <summary>Duración de referencia del paquete en minutos (opcional).</summary>
+    public int? DurationMinutes { get; private set; }
     public string? Icon { get; private set; }
     public bool Featured { get; private set; }
 
@@ -110,6 +112,13 @@ public sealed class Promotion : AggregateRoot<int>
     /// <summary>El cliente ya tiene los puntos que pide.</summary>
     public bool IsUnlockedFor(int customerPoints) => customerPoints >= RequiredPoints;
 
+    /// <summary>
+    /// Pasar de pointsBefore a pointsAfter la desbloquea hoy: está vigente y el saldo cruzó los
+    /// puntos que pide. Una promoción de 0 puntos nunca "se desbloquea" porque ya estaba disponible.
+    /// </summary>
+    public bool IsUnlockedBy(int pointsBefore, int pointsAfter, DateOnly today) =>
+        IsAvailableOn(today) && !IsUnlockedFor(pointsBefore) && IsUnlockedFor(pointsAfter);
+
     // ------------------------------------------------------------------ canje
 
     /// <summary>
@@ -158,8 +167,11 @@ public sealed class Promotion : AggregateRoot<int>
 
     private void Apply(PromotionDefinition d)
     {
-        Guard.Against(d.Price <= 0, DomainErrorCodes.InvalidPromotionPrice, "El precio debe ser mayor a cero.");
-        Guard.Against(d.DurationMinutes <= 0, DomainErrorCodes.InvalidPromotionDuration, "La duración debe ser mayor a cero.");
+        // opcionales: si vienen, tienen que tener sentido
+        Guard.Against(d.Price is { } price && price <= 0, DomainErrorCodes.InvalidPromotionPrice,
+            "El precio debe ser mayor a cero.");
+        Guard.Against(d.DurationMinutes is { } minutes && minutes <= 0, DomainErrorCodes.InvalidPromotionDuration,
+            "La duración debe ser mayor a cero.");
         Guard.Against(d.ValidTo < d.ValidFrom, DomainErrorCodes.InvalidPromotionRange, "La fecha de fin no puede ser anterior a la de inicio.");
         Guard.Against(d.RequiredPoints < 0, DomainErrorCodes.InvalidPromotionRequiredPoints, "Los puntos requeridos no pueden ser negativos.");
         // La estrategia del tipo sabe qué valores son válidos para ella (y rechaza PACKAGE).

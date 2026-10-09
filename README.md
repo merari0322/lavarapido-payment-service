@@ -164,6 +164,10 @@ src/
 | `PaymentRejected` | `payment.rejected` | pago rechazado (incluye `reason`) |
 | `PaymentRefunded` | `payment.refunded` | pago reembolsado |
 | `PromotionRedeemed` | `payment.promotion_redeemed` | cupón canjeado |
+| `LoyaltyPointsEarned` | `payment.loyalty_points_earned` | justo después de `payment.confirmed`, si ese pago acreditó puntos; trae el saldo nuevo y los cupones que esos puntos desbloquearon (`unlockedPromotions`) para avisarle al cliente |
+
+En las promociones, `price` y `durationMinutes` son opcionales: la web y la app ya no los piden (el
+cupón es un descuento sobre la reserva, ADR-015 sección 5). Si llegan, deben ser mayores que cero.
 
 ## Levantarlo con el resto del backend (recomendado)
 

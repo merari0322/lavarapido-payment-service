@@ -77,8 +77,10 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
             admin.UserId, command.TransactionReference, now);
 
         _payments.Add(payment);
-        await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
-        return await CompleteAsync(payment, booking, ct);
+        var credit = await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
+        var dto = await CompleteAsync(payment, booking, ct);
+        await PublishPointsEarnedAsync(credit, now, ct);
+        return dto;
     }
 
     /// <inheritdoc />
@@ -95,8 +97,10 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
 
         var now = Now;
         payment.Approve(admin.UserId, now);
-        await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
-        return await CompleteAsync(payment, booking, ct);
+        var credit = await _rewards.CreditForBookingAsync(booking, admin.UserId, now, ct);
+        var dto = await CompleteAsync(payment, booking, ct);
+        await PublishPointsEarnedAsync(credit, now, ct);
+        return dto;
     }
 
     /// <inheritdoc />
@@ -132,5 +136,16 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
         await _unitOfWork.CommitAsync(ct);
         await _events.PublishAndClearAsync(payment, PaymentIntegrationEvents.From(payment, booking?.OwnerUserId), ct);
         return await _dtos.ToDtoAsync(payment, booking, ct);
+    }
+
+    /// <summary>
+    /// Después de confirmar (los puntos ya quedaron en el ledger): avisa cuántos puntos ganó el
+    /// cliente y qué cupones desbloqueó. Va después de payment.confirmed para que el aviso del pago
+    /// llegue primero.
+    /// </summary>
+    private async Task PublishPointsEarnedAsync(LoyaltyCredit? credit, DateTime occurredOnUtc, CancellationToken ct)
+    {
+        if (credit is not null)
+            await _events.PublishAsync(LoyaltyIntegrationEvents.PointsEarned(credit, occurredOnUtc), ct);
     }
 }
