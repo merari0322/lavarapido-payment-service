@@ -60,6 +60,32 @@ public class PaymentCommandServiceTests
     // ---- Reportar ----
 
     [Fact]
+    public async Task Report_WithAReferenceAlreadyUsedForAnotherBooking_IsRejected()
+    {
+        // RF-016: el mismo comprobante no puede respaldar el pago de dos reservas distintas
+        _bookings.Bookings[8] = new BookingInfo(8, "RES-8", "CONFIRMED", 30_000m, "2026-10-09", "11:00",
+            "Lavado", "Mazda 3", "ABC123", CustomerId, 0);
+        await ReportedPaymentAsync();
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() => _service.ReportAsync(
+            new ReportPaymentCommand(8, 1, " REF-1 ", "data:image/png;base64,AAA"), Customer, default));
+
+        Assert.Equal(ErrorCodes.TransactionReferenceReused, error.Code);
+    }
+
+    [Fact]
+    public async Task Report_TheSameReferenceAgainForTheSameBookingAfterARejection_IsAllowed()
+    {
+        var paymentId = await ReportedPaymentAsync();
+        await _service.RejectAsync(paymentId, "El comprobante no se lee", Admin, default);
+
+        var again = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, "REF-1", "data:image/png;base64,BBB"),
+            Customer, default);
+
+        Assert.Equal("IN_REVIEW", again.Status);
+    }
+
+    [Fact]
     public async Task Report_ChargesWhatIsLeftToPayAndMapsTheBookingToItsOwnContract()
     {
         var dto = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, null, "data:image/png;base64,AAA"),
