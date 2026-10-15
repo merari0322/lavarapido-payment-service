@@ -127,4 +127,48 @@ public class PaymentQueryServiceTests
     // el id lo pone la persistencia: los más nuevos tienen id mayor
     private void AddPayment(Payment payment) =>
         _payments.Saved.Add(payment.WithId<Payment, long>(_payments.Saved.Count + 1));
+
+    // ---- Historial del cliente (RF-015) ----
+
+    private void ThreeBookingsWithPayments()
+    {
+        _bookings.Bookings[8] = new BookingInfo(8, "RES-8", "COMPLETED", 40_000m, "2026-10-01", "09:00",
+            "Polichado", "Mazda 3", "ABC123", 3, 0);
+        _bookings.Bookings[9] = new BookingInfo(9, "RES-9", "COMPLETED", 30_000m, "2026-10-12", "15:00",
+            "Lavado, Encerado", "Mazda 3", "ABC123", 3, 0);
+        foreach (var bookingId in new long[] { BookingId, 8, 9 })
+            _payments.Add(Payment.ReportWithReceipt(bookingId, 1, 10_000m, "data:image/png;base64,AAA", 3, null, DateTime.UtcNow));
+        _uow.CommitAsync(default).GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public async Task Mine_IsOrderedFromTheMostRecentBooking()
+    {
+        ThreeBookingsWithPayments();
+
+        var history = await _service.MineAsync(PaymentHistoryFilter.None, default);
+
+        Assert.Equal(new[] { "RES-9", "RES-7", "RES-8" }, history.Select(p => p.Booking!.Code));
+    }
+
+    [Fact]
+    public async Task Mine_FiltersByDatesAndService()
+    {
+        ThreeBookingsWithPayments();
+
+        var october = await _service.MineAsync(new PaymentHistoryFilter(new DateOnly(2026, 10, 5), new DateOnly(2026, 10, 31), null), default);
+        var washes = await _service.MineAsync(new PaymentHistoryFilter(null, null, " lavado "), default);
+
+        Assert.Equal(new[] { "RES-9", "RES-7" }, october.Select(p => p.Booking!.Code));
+        Assert.Equal(new[] { "RES-9", "RES-7" }, washes.Select(p => p.Booking!.Code));
+    }
+
+    [Fact]
+    public async Task Mine_WithTheDatesBackwards_IsAnInvalidRequest()
+    {
+        var error = await Assert.ThrowsAsync<InvalidRequestException>(() =>
+            _service.MineAsync(new PaymentHistoryFilter(new DateOnly(2026, 10, 31), new DateOnly(2026, 10, 1), null), default));
+
+        Assert.Equal(ErrorCodes.InvalidDateRange, error.Code);
+    }
 }

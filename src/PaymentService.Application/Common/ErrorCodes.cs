@@ -17,6 +17,7 @@ public static class ErrorCodes
     public const string PaymentAlreadyApproved = "PAYMENT_ALREADY_APPROVED";
     public const string PaymentAlreadyReported = "PAYMENT_ALREADY_REPORTED";
     public const string TransactionReferenceReused = "TRANSACTION_REFERENCE_REUSED";
+    public const string InvalidDateRange = "INVALID_DATE_RANGE";
 
     /// <summary>Mismo código que la regla del aggregate: para la web es el mismo error (cuenta no válida).</summary>
     public const string InvalidPaymentAccount = DomainErrorCodes.InvalidPaymentAccount;

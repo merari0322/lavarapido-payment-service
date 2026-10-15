@@ -45,10 +45,15 @@ public sealed class PaymentsController : ControllerBase
         return Created($"/api/v1/payments/{payment.Id}", payment);
     }
 
-    /// <summary>Pagos de las reservas del cliente que llama.</summary>
+    /// <summary>
+    /// Historial de pagos del cliente que llama (RF-015), de la reserva más reciente a la más
+    /// antigua. Filtros opcionales: from y to (fechas de la reserva, yyyy-MM-dd) y service.
+    /// </summary>
     [HttpGet("payments/me")]
     [Authorize(Roles = "CLIENT")]
-    public Task<IReadOnlyList<PaymentDto>> Mine(CancellationToken ct) => _queries.MineAsync(ct);
+    public Task<IReadOnlyList<PaymentDto>> Mine([FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] string? service, CancellationToken ct) =>
+        _queries.MineAsync(new PaymentHistoryFilter(from, to, service), ct);
 
     /// <summary>
     /// Cada reserva del cliente con el estado de su último pago y si todavía se puede pagar: el
