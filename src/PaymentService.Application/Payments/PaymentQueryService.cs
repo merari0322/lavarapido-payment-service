@@ -31,13 +31,33 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<PaymentDto>> MineAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<PaymentDto>> MineAsync(PaymentHistoryFilter filter, CancellationToken ct)
     {
-        var bookings = (await _bookings.MineAsync(ct)).ToDictionary(b => b.Id);
+        if (filter.From is { } from && filter.To is { } to && from > to)
+            throw new InvalidRequestException(ErrorCodes.InvalidDateRange, "La fecha inicial no puede ser posterior a la final.");
+
+        var service = filter.Service?.Trim();
+        var bookings = (await _bookings.MineAsync(ct))
+            .Where(b => InRange(b, filter.From, filter.To))
+            .Where(b => string.IsNullOrEmpty(service) || b.Services.Contains(service, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(b => b.Id);
         if (bookings.Count == 0) return Array.Empty<PaymentDto>();
 
-        var payments = await _payments.ListForBookingsAsync(bookings.Keys, ct);
+        // de la reserva más reciente a la más antigua; dentro de una reserva, el pago más nuevo primero
+        var payments = (await _payments.ListForBookingsAsync(bookings.Keys, ct))
+            .OrderByDescending(p => bookings[p.BookingId].Date, StringComparer.Ordinal)
+            .ThenByDescending(p => bookings[p.BookingId].StartTime, StringComparer.Ordinal)
+            .ThenByDescending(p => p.Id)
+            .ToList();
         return await _dtos.ToDtosAsync(payments, bookings, ct);
+    }
+
+    // la fecha de la reserva viene como yyyy-MM-dd; si no se entiende, no se filtra por ella
+    private static bool InRange(BookingInfo booking, DateOnly? from, DateOnly? to)
+    {
+        if (from is null && to is null) return true;
+        if (!DateOnly.TryParseExact(booking.Date, "yyyy-MM-dd", out var date)) return false;
+        return (from is null || date >= from) && (to is null || date <= to);
     }
 
     /// <inheritdoc />

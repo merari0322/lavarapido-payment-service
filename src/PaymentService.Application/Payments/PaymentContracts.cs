@@ -15,6 +15,15 @@ namespace PaymentService.Application.Payments;
 /// Amount es lo que se espera cobrar; ReportedAmount, lo que el comprobante dice que se pagó (null
 /// si el cliente no lo indicó): el admin compara ambos antes de aprobar.
 /// </summary>
+/// <summary>
+/// Filtros del historial de pagos del cliente (RF-015): fechas de la reserva (incluidas) y una
+/// parte del nombre del servicio. Todo opcional.
+/// </summary>
+public sealed record PaymentHistoryFilter(DateOnly? From, DateOnly? To, string? Service)
+{
+    public static readonly PaymentHistoryFilter None = new(null, null, null);
+}
+
 public sealed record PaymentDto(
     long Id,
     string Status,

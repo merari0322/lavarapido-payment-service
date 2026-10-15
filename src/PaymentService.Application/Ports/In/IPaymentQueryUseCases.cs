@@ -9,8 +9,11 @@ namespace PaymentService.Application.Ports.In;
 /// </summary>
 public interface IPaymentQueryUseCases
 {
-    /// <summary>Pagos de las reservas del cliente que llama.</summary>
-    Task<IReadOnlyList<PaymentDto>> MineAsync(CancellationToken ct);
+    /// <summary>
+    /// Historial de pagos del cliente que llama (RF-015): de la reserva más reciente a la más
+    /// antigua, opcionalmente entre dos fechas y por servicio.
+    /// </summary>
+    Task<IReadOnlyList<PaymentDto>> MineAsync(PaymentHistoryFilter filter, CancellationToken ct);
 
     /// <summary>Un pago del cliente que llama (404 si la reserva no es suya).</summary>
     Task<PaymentDto> GetMineAsync(long paymentId, CancellationToken ct);
