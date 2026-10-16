@@ -56,7 +56,7 @@ internal static class ApiServiceCollectionExtensions
     /// <summary>CORS para la web (orígenes separados por coma en CORS_ALLOWED_ORIGINS).</summary>
     public static IServiceCollection AddConfiguredCors(this IServiceCollection services, IConfiguration config)
     {
-        var origins = (config["CORS_ALLOWED_ORIGINS"] ?? "http://localhost:4200")
+        var origins = (config["CORS_ALLOWED_ORIGINS"] ?? "http://localhost:4200,http://localhost:8081")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod()));
         return services;
