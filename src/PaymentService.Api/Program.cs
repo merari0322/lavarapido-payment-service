@@ -40,12 +40,14 @@ builder.Services.AddInfrastructure(config);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAccessTokenProvider, HttpContextAccessTokenProvider>();
+builder.Services.AddSingleton<IRequestCorrelation, HttpContextRequestCorrelation>();
 
 var app = builder.Build();
 
 // IDs reales de los catálogos (tipos de descuento y de movimiento de puntos), leídos por código.
 await app.Services.InitializeInfrastructureAsync();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -59,8 +61,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { service = "payment-service", status = "ok" }));
-// misma ruta de salud que los servicios Java
-app.MapGet("/actuator/health", () => Results.Ok(new { status = "UP" }));
+app.MapHealthEndpoints();
 
 app.Run();
