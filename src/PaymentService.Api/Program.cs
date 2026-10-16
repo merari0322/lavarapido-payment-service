@@ -59,8 +59,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { service = "payment-service", status = "ok" }));
-// misma ruta de salud que los servicios Java
-app.MapGet("/actuator/health", () => Results.Ok(new { status = "UP" }));
+app.MapHealthEndpoints();
 
 app.Run();
