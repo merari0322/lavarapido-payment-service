@@ -254,3 +254,23 @@ curl http://localhost:5080/health
 ```
 
 Esperado: `{"service":"payment-service","status":"ok"}`
+
+## Proyecto LavaRápido
+
+Este repositorio es parte de LavaRápido (Vehicle Washing), proyecto formativo del Tecnólogo en
+Análisis y Desarrollo de Software (ADSO), ficha 3145556, SENA Regional Huila.
+
+| Recurso | Enlace |
+|---|---|
+| Documentación y manuales (ES/EN, MD · PDF · Word) | [lavarapido-docs](https://github.com/BrayanCABRERA123/lavarapido-docs#readme) |
+| Manual técnico | [09_MANUALES/ES/MD/manual-tecnico.md](https://github.com/BrayanCABRERA123/lavarapido-docs/blob/main/09_MANUALES/ES/MD/manual-tecnico.md) |
+| Manual de instalación | [09_MANUALES/ES/MD/manual-de-instalacion.md](https://github.com/BrayanCABRERA123/lavarapido-docs/blob/main/09_MANUALES/ES/MD/manual-de-instalacion.md) |
+| Levantar todo el sistema | [lavarapido-infra](https://github.com/BrayanCABRERA123/lavarapido-infra) (`docker compose --profile app up -d`) |
+| Aplicación desplegada | https://lavarapidovehicular.northcentralus.cloudapp.azure.com |
+
+**Ramas y commits:** se trabaja en `develop` con ramas `feature/`, `fix/` y `docs/` que se
+fusionan con `git merge --no-ff`; los commits siguen Conventional Commits
+(`feat(scope): ...`, `fix(scope): ...`). Detalle en la
+[guía de git del equipo](https://github.com/BrayanCABRERA123/lavarapido-docs#guía-de-git-del-equipo).
+
+**Equipo:** Brayan Estiven Patiño Cabrera, Juan Camilo Guilombo Osorio y Merari Urbano Quintero.
