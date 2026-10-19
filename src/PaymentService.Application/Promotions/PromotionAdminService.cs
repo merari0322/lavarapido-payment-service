@@ -37,8 +37,10 @@ public sealed class PromotionAdminService : IPromotionAdminUseCases
     /// <inheritdoc />
     public async Task<PromotionMetricsDto> MetricsAsync(CancellationToken ct)
     {
-        var stats = (await _redemptions.StatsByPromotionAsync(ct)).Values;
-        return new PromotionMetricsDto(stats.Sum(s => s.Redemptions), stats.Sum(s => s.Savings), 0);
+        var promotions = await _promotions.ListAsync(ct);
+        var stats = await _redemptions.StatsByPromotionAsync(ct);
+        var current = promotions.Select(p => stats.GetValueOrDefault(p.Id, RedemptionStats.None)).ToList();
+        return new PromotionMetricsDto(current.Sum(s => s.Redemptions), current.Sum(s => s.Savings));
     }
 
     /// <inheritdoc />

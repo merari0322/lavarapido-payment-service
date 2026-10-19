@@ -25,10 +25,10 @@ public sealed record PromotionDto(
     decimal DiscountValue);
 
 /// <summary>
-/// Métricas del panel. Conversion queda en 0: nada registra cuántas veces se mostró una
-/// promoción, así que todavía no hay con qué calcularla.
+/// Métricas del panel: canjes y ahorro de las promociones vigentes en el catálogo (las borradas
+/// no cuentan, así el total coincide con la suma de las tarjetas).
 /// </summary>
-public sealed record PromotionMetricsDto(int Redemptions, decimal Savings, decimal Conversion);
+public sealed record PromotionMetricsDto(int Redemptions, decimal Savings);
 
 /// <summary>
 /// Datos para crear o editar una promoción. DiscountType (PERCENT o FIXED) y DiscountValue son
