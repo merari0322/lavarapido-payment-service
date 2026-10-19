@@ -1,0 +1,44 @@
+# Compila y corre las pruebas en cada push o pull request a develop/main.
+# Las pruebas de integración necesitan SQL Server: sin la cadena de conexión se omiten solas.
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - run: dotnet restore PaymentService.sln
+
+      - run: dotnet build PaymentService.sln --no-restore -c Release
+
+      - name: Pruebas
+        run: dotnet test PaymentService.sln --no-build -c Release --logger "trx;LogFilePrefix=results" --results-directory test-results
+
+      - name: Reportes de pruebas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 7
