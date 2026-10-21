@@ -105,6 +105,29 @@ public class PaymentTests
     }
 
     [Fact]
+    public void ReportWithReceipt_WhenReceiptIsOver2Mb_ThrowsDomainException()
+    {
+        // 2 MB + 3 bytes decodificados (cada 4 caracteres base64 son 3 bytes)
+        var file = "data:image/jpeg;base64," + new string('A', (int)(Payment.MaxReceiptBytes / 3 * 4) + 8);
+
+        var error = Assert.Throws<DomainException>(() =>
+            Payment.ReportWithReceipt(10, 2, 80m, file, reportedBy: 5, null, Now));
+
+        Assert.Equal("RECEIPT_TOO_LARGE", error.Code);
+    }
+
+    [Fact]
+    public void ReportWithReceipt_WhenReceiptIsExactly2Mb_IsAccepted()
+    {
+        // 2 MB exactos: 2097152 bytes = 699050 grupos de 3 + 2 bytes (un '=' de relleno)
+        var file = "data:image/jpeg;base64," + new string('A', 699051 * 4 - 1) + "=";
+
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, file, reportedBy: 5, null, Now);
+
+        Assert.Equal(PaymentStatus.InReview, payment.Status);
+    }
+
+    [Fact]
     public void RegisterInPerson_IsApprovedByTheAdminWithoutImage()
     {
         var payment = Payment.RegisterInPerson(10, 1, 80m, registeredBy: Admin, transactionReference: null, nowUtc: Now);

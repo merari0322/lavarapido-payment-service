@@ -22,6 +22,9 @@ public sealed class Payment : AggregateRoot<long>
 {
     public const int MaxRejectionReasonLength = 200;
 
+    /// <summary>Peso máximo del comprobante del cliente (las apps lo comprimen antes de enviarlo).</summary>
+    public const long MaxReceiptBytes = 2 * 1024 * 1024;
+
     private readonly List<PaymentReceipt> _receipts = new();
 
     private Payment() { }
@@ -82,6 +85,8 @@ public sealed class Payment : AggregateRoot<long>
         // El cliente siempre respalda su pago con la imagen del comprobante.
         Guard.Against(!ImageSource.IsImage(receiptFile), DomainErrorCodes.InvalidReceiptFile,
             "El comprobante debe ser una imagen.");
+        Guard.Against(ImageSource.DecodedSize(receiptFile) > MaxReceiptBytes, DomainErrorCodes.ReceiptTooLarge,
+            "El comprobante no puede pesar más de 2 MB.");
         var payment = Create(bookingId, paymentAccountId, amount);
         payment.AttachReceipt(receiptFile, reportedBy, nowUtc, transactionReference, reportedAmount);
         payment.SubmitForReview();

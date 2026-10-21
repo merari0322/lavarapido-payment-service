@@ -19,6 +19,7 @@ public static class DomainErrorCodes
 
     // ---- Comprobantes
     public const string InvalidReceiptFile = "INVALID_RECEIPT_FILE";
+    public const string ReceiptTooLarge = "RECEIPT_TOO_LARGE";
     public const string InvalidReceiptUploader = "INVALID_RECEIPT_UPLOADER";
     public const string InvalidReportedAmount = "INVALID_REPORTED_AMOUNT";
     public const string InvalidTransactionReference = "INVALID_TRANSACTION_REFERENCE";
