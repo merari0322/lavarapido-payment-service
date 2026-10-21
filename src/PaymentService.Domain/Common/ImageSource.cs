@@ -22,4 +22,16 @@ public static class ImageSource
         value is not null &&
         AllowedPrefixes.Any(prefix =>
             value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && value.Length > prefix.Length);
+
+    /// <summary>
+    /// Bytes que ocupa la imagen ya decodificada (sin el prefijo data: y sin el relleno '=' del
+    /// base64). Sirve para limitar el tamaño del archivo sin tener que decodificarlo.
+    /// </summary>
+    public static long DecodedSize(string dataUrl)
+    {
+        var comma = dataUrl.IndexOf(',');
+        var payload = comma < 0 ? dataUrl.AsSpan() : dataUrl.AsSpan(comma + 1);
+        var padding = payload.EndsWith("==") ? 2 : payload.EndsWith("=") ? 1 : 0;
+        return payload.Length / 4L * 3 - padding;
+    }
 }

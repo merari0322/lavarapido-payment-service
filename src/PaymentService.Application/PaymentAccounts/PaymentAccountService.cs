@@ -21,8 +21,10 @@ public sealed class PaymentAccountService : IPaymentAccountUseCases
     }
 
     /// <inheritdoc />
+    // Incluye la cuenta de efectivo si está activa: así el cliente solo ve "Efectivo" cuando el
+    // admin lo tiene habilitado. Reportar con ella sigue prohibido (BookingPaymentGuard).
     public Task<IReadOnlyList<PaymentAccountDto>> ListForCustomersAsync(CancellationToken ct) =>
-        _reader.ListAsync(onlyActive: true, onlyReceiptMethods: true, ct);
+        _reader.ListAsync(onlyActive: true, onlyReceiptMethods: false, ct);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PaymentAccountDto>> ListAllAsync(CancellationToken ct) =>

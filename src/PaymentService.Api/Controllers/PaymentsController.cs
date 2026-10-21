@@ -29,7 +29,7 @@ public sealed class PaymentsController : ControllerBase
         _accounts = accounts;
     }
 
-    /// <summary>Cuentas activas del lavadero que reciben comprobante (Nequi, Daviplata, transferencia).</summary>
+    /// <summary>Cuentas activas del lavadero: las de QR (Nequi, Daviplata, transferencia) y el efectivo si está activo.</summary>
     [HttpGet("payment-accounts")]
     public Task<IReadOnlyList<PaymentAccountDto>> Accounts(CancellationToken ct) =>
         _accounts.ListForCustomersAsync(ct);
