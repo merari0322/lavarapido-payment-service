@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PaymentService.Api.Contracts;
 using PaymentService.Api.Http;
 using PaymentService.Application.Loyalty;
+using PaymentService.Application.Payments;
 using PaymentService.Application.Ports.In;
 using PaymentService.Application.Promotions;
 
@@ -40,4 +41,12 @@ public sealed class LoyaltyController : ControllerBase
     [HttpPost("redeem")]
     public Task<RedeemPromotionResultDto> Redeem(RedeemPromotionRequest request, CancellationToken ct) =>
         _promotions.RedeemAsync(new RedeemPromotionCommand(request.BookingId, request.Code), HttpContext.GetCaller(), ct);
+
+    /// <summary>
+    /// "Quitar cupón" (E-08): anula el canje en una reserva propia sin pago en revisión ni aprobado
+    /// (si no, 409) y devuelve lo que ahora falta por pagar.
+    /// </summary>
+    [HttpDelete("redemptions/{bookingId:long}/{promotionId:int}")]
+    public Task<AmountDueDto> CancelRedemption(long bookingId, int promotionId, CancellationToken ct) =>
+        _promotions.CancelRedemptionAsync(bookingId, promotionId, HttpContext.GetCaller(), ct);
 }

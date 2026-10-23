@@ -144,6 +144,12 @@ internal sealed class FakeRedemptionRepository : IPromotionRedemptionRepository
     public Task<bool> ExistsAsync(long bookingId, int promotionId, CancellationToken ct) =>
         Task.FromResult(Saved.Any(r => r.BookingId == bookingId && r.PromotionId == promotionId));
 
+    public Task<PromotionRedemption?> GetAsync(long bookingId, int promotionId, CancellationToken ct) =>
+        Task.FromResult(Saved.FirstOrDefault(r => r.BookingId == bookingId && r.PromotionId == promotionId));
+
+    public Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct) =>
+        Task.FromResult(Saved.Any(r => r.BookingId == bookingId && r.PromotionId != promotionId));
+
     public Task<int> CountAsync(int promotionId, CancellationToken ct) => Task.FromResult(Saved.Count(r => r.PromotionId == promotionId));
 
     public Task<int> CountByCustomerAsync(int promotionId, long customerUserId, CancellationToken ct) =>
@@ -157,6 +163,8 @@ internal sealed class FakeRedemptionRepository : IPromotionRedemptionRepository
             .ToDictionary(g => g.Key, g => new RedemptionStats(g.Count(), g.Sum(r => r.AppliedAmount))));
 
     public void Add(PromotionRedemption redemption) => _uow.Enlist(() => Saved.Add(redemption));
+
+    public void Remove(PromotionRedemption redemption) => _uow.Enlist(() => Saved.Remove(redemption));
 }
 
 internal sealed class FakeBookingDirectory : IBookingDirectory

@@ -500,6 +500,7 @@ Todas las rutas empiezan con `/api/v1`.
 | GET | `/loyalty/balance` | Mi saldo de puntos | `{points}` |
 | GET | `/loyalty/promotions` | Promociones vigentes, marcando cuáles desbloqueé | `PromotionForCustomerDto[]` |
 | POST | `/loyalty/redeem` | Canjear cupón `{bookingId, code}` | `{promotionId, promotionCode, promotionName, discountAmount, newTotal}` |
+| DELETE | `/loyalty/redemptions/{bookingId}/{promotionId}` | Quitar el cupón (E-08): solo el dueño y sin pago en revisión ni aprobado (si no, 409). Una sola promoción por reserva (E-09, `PROMOTION_ONE_PER_BOOKING`) | `{bookingId, bookingTotal, appliedDiscounts, amountDue}` |
 
 **Admin (`ADMIN`)**
 

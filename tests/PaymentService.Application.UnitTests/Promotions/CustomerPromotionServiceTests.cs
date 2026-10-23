@@ -17,6 +17,7 @@ public class CustomerPromotionServiceTests
     private readonly FakeUnitOfWork _uow = new();
     private readonly FakePromotionRepository _promotions = new();
     private readonly FakeRedemptionRepository _redemptions;
+    private readonly FakePaymentRepository _payments;
     private readonly FakeBookingDirectory _bookings = new();
     private readonly RecordingPublisher _events = new();
     private readonly CustomerPromotionService _service;
@@ -24,9 +25,9 @@ public class CustomerPromotionServiceTests
     public CustomerPromotionServiceTests()
     {
         _redemptions = new FakeRedemptionRepository(_uow);
-        var payments = new FakePaymentRepository(_uow);
+        _payments = new FakePaymentRepository(_uow);
         _service = new CustomerPromotionService(_promotions, _redemptions, new FakeLedger(_uow), _bookings,
-            new BookingPaymentGuard(payments, new FakePaymentAccountRepository()), new AmountDueCalculator(_redemptions),
+            new BookingPaymentGuard(_payments, new FakePaymentAccountRepository()), new AmountDueCalculator(_redemptions),
             _uow, _events, new FixedClock());
 
         _bookings.Bookings[BookingId] = new BookingInfo(BookingId, "RES-7", "CONFIRMED", 40_000m, "2026-10-08", "10:00",
@@ -36,6 +37,9 @@ public class CustomerPromotionServiceTests
         _promotions.Add(Promotion.Create(new PromotionDefinition("VERANO10", "Verano", null, 50_000m, 60, null, false,
                 Array.Empty<string>(), today.AddDays(-1), today.AddDays(30), DiscountType.Percentage, 10m, 0))
             .WithId<Promotion, int>(1));
+        _promotions.Add(Promotion.Create(new PromotionDefinition("OTRO5", "Otro", null, null, null, null, false,
+                Array.Empty<string>(), today.AddDays(-1), today.AddDays(30), DiscountType.Percentage, 5m, 0))
+            .WithId<Promotion, int>(2));
     }
 
     [Fact]
@@ -64,6 +68,57 @@ public class CustomerPromotionServiceTests
 
         Assert.Equal("PROMOTION_ALREADY_REDEEMED", error.Code);
         Assert.Single(_events.Published);
+    }
+
+    [Fact]
+    public async Task Redeem_ASecondDifferentCouponOnTheSameBooking_IsRejected()
+    {
+        // E-09: una sola promoción por reserva
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+
+        var error = await Assert.ThrowsAsync<Domain.Common.DomainException>(() =>
+            _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "OTRO5"), Customer, default));
+
+        Assert.Equal("PROMOTION_ONE_PER_BOOKING", error.Code);
+        Assert.Single(_redemptions.Saved);
+    }
+
+    [Fact]
+    public async Task CancelRedemption_RemovesItAndTheAmountDueIsRecalculated()
+    {
+        // E-08: "Quitar cupón" borra el canje en el servidor, no solo en la pantalla
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+
+        var result = await _service.CancelRedemptionAsync(BookingId, 1, Customer, default);
+
+        Assert.Empty(_redemptions.Saved);
+        Assert.Equal(0m, result.AppliedDiscounts);
+        Assert.Equal(40_000m, result.AmountDue);
+        Assert.Equal(40_000m, await new AmountDueCalculator(_redemptions).ForAsync(_bookings.Bookings[BookingId], default));
+    }
+
+    [Fact]
+    public async Task CancelRedemption_WithAPaymentInReview_IsAConflict()
+    {
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+        _payments.Add(Domain.Payments.Payment.ReportWithReceipt(BookingId, 1, 36_000m, "data:image/png;base64,AAA",
+            Customer.UserId, null, FixedClock.Now));
+        await _uow.CommitAsync(default);
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() =>
+            _service.CancelRedemptionAsync(BookingId, 1, Customer, default));
+
+        Assert.Equal(ErrorCodes.PaymentAlreadyReported, error.Code);
+        Assert.Single(_redemptions.Saved);
+    }
+
+    [Fact]
+    public async Task CancelRedemption_ThatDoesNotExist_IsNotFound()
+    {
+        var error = await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.CancelRedemptionAsync(BookingId, 1, Customer, default));
+
+        Assert.Equal(ErrorCodes.PromotionRedemptionNotFound, error.Code);
     }
 
     [Fact]

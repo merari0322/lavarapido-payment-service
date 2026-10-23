@@ -26,6 +26,7 @@ public static class ErrorCodes
 
     public const string PromotionNotFound = "PROMOTION_NOT_FOUND";
     public const string PromotionCodeTaken = "PROMOTION_CODE_TAKEN";
+    public const string PromotionRedemptionNotFound = "PROMOTION_REDEMPTION_NOT_FOUND";
 
     public const string DataConflict = "DATA_CONFLICT";
 }

@@ -17,6 +17,12 @@ internal sealed class PromotionRedemptionRepository : IPromotionRedemptionReposi
     public Task<bool> ExistsAsync(long bookingId, int promotionId, CancellationToken ct) =>
         _db.PromotionRedemptions.AnyAsync(r => r.BookingId == bookingId && r.PromotionId == promotionId, ct);
 
+    public Task<PromotionRedemption?> GetAsync(long bookingId, int promotionId, CancellationToken ct) =>
+        _db.PromotionRedemptions.FirstOrDefaultAsync(r => r.BookingId == bookingId && r.PromotionId == promotionId, ct);
+
+    public Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct) =>
+        _db.PromotionRedemptions.AnyAsync(r => r.BookingId == bookingId && r.PromotionId != promotionId, ct);
+
     public Task<int> CountAsync(int promotionId, CancellationToken ct) =>
         _db.PromotionRedemptions.CountAsync(r => r.PromotionId == promotionId, ct);
 
@@ -37,4 +43,6 @@ internal sealed class PromotionRedemptionRepository : IPromotionRedemptionReposi
     }
 
     public void Add(PromotionRedemption redemption) => _db.PromotionRedemptions.Add(redemption);
+
+    public void Remove(PromotionRedemption redemption) => _db.PromotionRedemptions.Remove(redemption);
 }

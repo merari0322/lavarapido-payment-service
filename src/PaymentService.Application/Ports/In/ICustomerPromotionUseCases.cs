@@ -1,4 +1,5 @@
 using PaymentService.Application.Common;
+using PaymentService.Application.Payments;
 using PaymentService.Application.Promotions;
 
 namespace PaymentService.Application.Ports.In;
@@ -11,4 +12,10 @@ public interface ICustomerPromotionUseCases
 
     /// <summary>Canjea un cupón en una reserva propia que todavía no tiene pago reportado ni aprobado.</summary>
     Task<RedeemPromotionResultDto> RedeemAsync(RedeemPromotionCommand command, Caller caller, CancellationToken ct);
+
+    /// <summary>
+    /// Anula el canje de un cupón en una reserva propia ("Quitar cupón", E-08) mientras no tenga un pago
+    /// en revisión ni aprobado, y devuelve lo que ahora falta por pagar.
+    /// </summary>
+    Task<AmountDueDto> CancelRedemptionAsync(long bookingId, int promotionId, Caller caller, CancellationToken ct);
 }
