@@ -27,6 +27,9 @@ public sealed class Promotion : AggregateRoot<int>
     private const int MaxIconLength = 40;
     private const int MaxBenefitsLength = 600;
 
+    /// <summary>Lo mínimo que queda por pagar después de un cupón: un peso (E-07).</summary>
+    public const decimal MinAmountDue = 1m;
+
     private Promotion() { }
 
     public string Code { get; private set; } = string.Empty;
@@ -123,14 +126,16 @@ public sealed class Promotion : AggregateRoot<int>
 
     /// <summary>
     /// Descuento en pesos sobre ese subtotal: lo calcula la estrategia del tipo y luego se aplican
-    /// los topes (MaxDiscountAmount y nunca más que el propio subtotal), redondeado a centavos.
+    /// los topes (MaxDiscountAmount y dejar siempre MinAmountDue por pagar), redondeado a centavos.
+    /// Un cupón nunca deja la reserva en 0: el pago exige un monto mayor que cero (E-07). El tope
+    /// también cubre un FIXED mayor que el total y las promociones de 100 % guardadas antes de la regla.
     /// </summary>
     public decimal CalculateDiscount(decimal subtotal)
     {
-        if (subtotal <= 0) return 0m;
+        if (subtotal <= MinAmountDue) return 0m;
         var discount = DiscountStrategyFactory.For(DiscountType).Calculate(subtotal, DiscountValue);
         if (MaxDiscountAmount is { } cap) discount = Math.Min(discount, cap);
-        discount = Math.Min(discount, subtotal);
+        discount = Math.Min(discount, subtotal - MinAmountDue);
         return Math.Round(discount, 2, MidpointRounding.AwayFromZero);
     }
 

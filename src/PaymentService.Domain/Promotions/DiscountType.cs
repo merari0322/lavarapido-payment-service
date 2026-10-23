@@ -8,7 +8,7 @@ namespace PaymentService.Domain.Promotions;
 /// </summary>
 public enum DiscountType
 {
-    /// <summary>Porcentaje sobre el subtotal (DiscountValue entre 0 y 100).</summary>
+    /// <summary>Porcentaje sobre el subtotal (DiscountValue entre 1 y 99, E-07).</summary>
     Percentage,
 
     /// <summary>Monto fijo en pesos.</summary>
