@@ -86,6 +86,7 @@ public class PromotionTests
 
     [Theory]
     [InlineData(0)]
+    [InlineData(100)] // E-07: un cupón del 100 % dejaba la reserva sin poder pagarse
     [InlineData(101)]
     public void Create_WithPercentOutOfRange_ThrowsDomainException(int percent)
     {
@@ -134,7 +135,31 @@ public class PromotionTests
         var promotion = Promotion.Create(Definition(DiscountType.FixedAmount, 20_000m));
 
         Assert.Equal(20_000m, promotion.CalculateDiscount(50_000m));
-        Assert.Equal(12_000m, promotion.CalculateDiscount(12_000m));
+        // E-07: siempre queda al menos 1 peso por pagar (el pago exige monto > 0)
+        Assert.Equal(11_999m, promotion.CalculateDiscount(12_000m));
+        Assert.Equal(0m, promotion.CalculateDiscount(1m));
+    }
+
+    [Fact]
+    public void Redeem_FixedAmountAboveTheTotal_LeavesAnAmountToPay()
+    {
+        // E-07: un FIXED mayor que el total no puede dejar la reserva en 0
+        var promotion = Promotion.Create(Definition(DiscountType.FixedAmount, 60_000m));
+
+        var redemption = promotion.Redeem(Request(subtotal: 40_000m));
+
+        Assert.Equal(39_999m, redemption.AppliedAmount);
+        Assert.True(PaymentService.Domain.Payments.PaymentPolicy.AmountDue(40_000m, redemption.AppliedAmount) > 0);
+    }
+
+    [Fact]
+    public void CalculateDiscount_APercentOf100SavedBeforeTheRule_StillLeavesAnAmountToPay()
+    {
+        // E-07: una promoción de 100 % creada antes de la regla sigue en la base
+        var promotion = Promotion.Create(Definition(value: 50m));
+        SetLimit(promotion, nameof(Promotion.DiscountValue), 100m);
+
+        Assert.Equal(39_999m, promotion.CalculateDiscount(40_000m));
     }
 
     [Fact]

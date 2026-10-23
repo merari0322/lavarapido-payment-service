@@ -287,7 +287,7 @@ canjes, para no tener un contador que se desincronice.
 
 ```
 IDiscountStrategy
- ├── PercentageDiscountStrategy   subtotal × valor / 100   (valor entre 1 y 100)
+ ├── PercentageDiscountStrategy   subtotal × valor / 100   (valor entre 1 y 99; siempre queda 1 peso por pagar, E-07)
  └── FixedAmountDiscountStrategy  valor fijo en pesos      (valor > 0)
 
 DiscountStrategyFactory.For(tipo) → la estrategia que corresponde
