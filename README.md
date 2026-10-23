@@ -213,8 +213,9 @@ dotnet build
 dotnet test
 ```
 
-Esperado: `Build succeeded` con 0 errores, y 102 pruebas pasadas (92 del dominio y 10 de los casos
-de uso, que prueban Application con dobles en memoria de sus puertos de salida).
+Esperado: `Build succeeded` con 0 errores, y 143 pruebas pasadas al 23-10-2026 (115 del dominio y
+28 de los casos de uso, que prueban Application con dobles en memoria de sus puertos de salida), más
+las 7 de integración, que salen como omitidas si no se configura su base (ver abajo).
 
 ### Pruebas de integración (contra SQL Server real, opcionales)
 
