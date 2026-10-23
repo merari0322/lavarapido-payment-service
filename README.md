@@ -222,19 +222,24 @@ Prueban lo que los tests unitarios no pueden: consultas de EF, concurrencia (`ro
 `sequence_no`) y que la base acepte lo que el código escribe. Usan la base **aislada** de este repo
 (puerto 1434), nunca la compartida del equipo (1433): insertan filas de prueba.
 
+La contraseña de esa base sale de `MSSQL_SA_PASSWORD` en el `.env` de este repo (copia
+`.env.example`; el `.env` no se sube). No hay contraseña por defecto en el repositorio (E-05).
+
 ```bash
 # 1. Levantar la base aislada y aplicar todas las migraciones
 docker compose up --abort-on-container-exit migrate
 
 # 2. Correr las pruebas apuntando a esa base (en Git Bash)
-PAYMENT_INTEGRATION_DB='Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=Lavado_Dev_2026!;TrustServerCertificate=True' \
+set -a; . ./.env; set +a
+PAYMENT_INTEGRATION_DB="Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=$MSSQL_SA_PASSWORD;TrustServerCertificate=True" \
   dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 
 En PowerShell el paso 2 es:
 
 ```powershell
-$env:PAYMENT_INTEGRATION_DB = 'Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=Lavado_Dev_2026!;TrustServerCertificate=True'
+$env:MSSQL_SA_PASSWORD = (Get-Content .env | Where-Object { $_ -like 'MSSQL_SA_PASSWORD=*' }) -replace '^MSSQL_SA_PASSWORD=', ''
+$env:PAYMENT_INTEGRATION_DB = "Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=$env:MSSQL_SA_PASSWORD;TrustServerCertificate=True"
 dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 
