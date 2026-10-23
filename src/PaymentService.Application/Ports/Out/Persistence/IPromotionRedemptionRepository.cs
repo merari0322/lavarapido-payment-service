@@ -7,6 +7,12 @@ public interface IPromotionRedemptionRepository
 {
     Task<bool> ExistsAsync(long bookingId, int promotionId, CancellationToken ct);
 
+    /// <summary>El canje de esa promoción en esa reserva, si existe.</summary>
+    Task<PromotionRedemption?> GetAsync(long bookingId, int promotionId, CancellationToken ct);
+
+    /// <summary>Si la reserva ya tiene canjeada alguna promoción distinta de esa (E-09).</summary>
+    Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct);
+
     /// <summary>Cuántas veces se ha canjeado la promoción en total.</summary>
     Task<int> CountAsync(int promotionId, CancellationToken ct);
 
@@ -20,6 +26,8 @@ public interface IPromotionRedemptionRepository
     Task<IReadOnlyDictionary<int, RedemptionStats>> StatsByPromotionAsync(CancellationToken ct);
 
     void Add(PromotionRedemption redemption);
+
+    void Remove(PromotionRedemption redemption);
 }
 
 /// <summary>Usos y monto total descontado de una promoción.</summary>

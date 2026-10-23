@@ -10,7 +10,7 @@ namespace PaymentService.Domain.Promotions;
 /// pantallas ya no los piden porque el cupón no los usa).
 ///
 /// Reglas del canje (Redeem): vigencia y activa, puntos de fidelización suficientes (RequiredPoints),
-/// compra mínima, una sola vez por reserva y los límites de usos total y por cliente. El número de
+/// compra mínima, una sola promoción por reserva (E-09) y los límites de usos total y por cliente. El número de
 /// usos no se guarda aquí: se deriva contando los canjes (PromotionRedemption), para no tener un
 /// segundo contador que se desincronice.
 ///
@@ -154,6 +154,8 @@ public sealed class Promotion : AggregateRoot<int>
         Guard.Against(!IsUnlockedFor(request.CustomerPoints), DomainErrorCodes.PromotionNotRedeemable,
             "Todavía no acumulas los puntos necesarios para desbloquear ese cupón.");
         Guard.Against(request.AlreadyRedeemedOnBooking, DomainErrorCodes.PromotionAlreadyRedeemed, "Ya canjeaste este cupón en esta reserva.");
+        Guard.Against(request.OtherPromotionOnBooking, DomainErrorCodes.PromotionOnePerBooking,
+            "Esta reserva ya tiene un cupón. Quítalo si quieres usar otro.");
         Guard.Against(request.Subtotal < MinPurchaseAmount, DomainErrorCodes.PromotionMinPurchaseNotMet,
             $"Este cupón exige una compra mínima de {MinPurchaseAmount:N0}.");
         Guard.Against(MaxRedemptions is { } total && request.TotalRedemptions >= total, DomainErrorCodes.PromotionExhausted,

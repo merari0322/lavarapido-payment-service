@@ -56,6 +56,7 @@ public static class DomainErrorCodes
     // ---- Canje de promociones
     public const string PromotionNotRedeemable = "PROMOTION_NOT_REDEEMABLE";
     public const string PromotionAlreadyRedeemed = "PROMOTION_ALREADY_REDEEMED";
+    public const string PromotionOnePerBooking = "PROMOTION_ONE_PER_BOOKING";
     public const string PromotionMinPurchaseNotMet = "PROMOTION_MIN_PURCHASE_NOT_MET";
     public const string PromotionExhausted = "PROMOTION_EXHAUSTED";
     public const string PromotionCustomerLimitReached = "PROMOTION_CUSTOMER_LIMIT_REACHED";

@@ -231,6 +231,18 @@ public class PromotionTests
     }
 
     [Fact]
+    public void Redeem_WhenTheBookingAlreadyHasAnotherPromotion_IsRejected()
+    {
+        // E-09: una sola promoción canjeada por reserva
+        var promotion = Promotion.Create(Definition());
+
+        var error = Assert.Throws<DomainException>(() => promotion.Redeem(Request() with { OtherPromotionOnBooking = true }));
+
+        Assert.Equal("PROMOTION_ONE_PER_BOOKING", error.Code);
+        Assert.Empty(promotion.DomainEvents);
+    }
+
+    [Fact]
     public void Redeem_TwiceOnSameBooking_IsRejected()
     {
         var promotion = Promotion.Create(Definition());

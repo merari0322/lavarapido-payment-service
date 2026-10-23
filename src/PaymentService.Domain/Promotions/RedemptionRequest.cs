@@ -14,6 +14,7 @@ namespace PaymentService.Domain.Promotions;
 /// <param name="AlreadyRedeemedOnBooking">Si esta promoción ya se canjeó en esta reserva.</param>
 /// <param name="TotalRedemptions">Cuántas veces se ha canjeado en total.</param>
 /// <param name="CustomerRedemptions">Cuántas veces la ha canjeado este cliente.</param>
+/// <param name="OtherPromotionOnBooking">Si la reserva ya tiene canjeada otra promoción (E-09).</param>
 public sealed record RedemptionRequest(
     long BookingId,
     string BookingCode,
@@ -23,7 +24,8 @@ public sealed record RedemptionRequest(
     decimal Subtotal,
     bool AlreadyRedeemedOnBooking,
     int TotalRedemptions,
-    int CustomerRedemptions)
+    int CustomerRedemptions,
+    bool OtherPromotionOnBooking = false)
 {
     /// <summary>Fecha del canje, para comparar con la vigencia de la promoción.</summary>
     public DateOnly Today => DateOnly.FromDateTime(NowUtc);

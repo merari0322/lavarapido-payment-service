@@ -74,7 +74,8 @@ public sealed class CustomerPromotionService : ICustomerPromotionUseCases
             subtotal,
             await _redemptions.ExistsAsync(booking.Id, promotion.Id, ct),
             await _redemptions.CountAsync(promotion.Id, ct),
-            await _redemptions.CountByCustomerAsync(promotion.Id, caller.UserId, ct));
+            await _redemptions.CountByCustomerAsync(promotion.Id, caller.UserId, ct),
+            await _redemptions.HasOtherOnBookingAsync(booking.Id, promotion.Id, ct));
 
         // La regla completa del canje vive en el aggregate.
         var redemption = promotion.Redeem(request);
@@ -84,6 +85,23 @@ public sealed class CustomerPromotionService : ICustomerPromotionUseCases
 
         return new RedeemPromotionResultDto(promotion.Id, promotion.Code, promotion.Name, redemption.AppliedAmount,
             subtotal - redemption.AppliedAmount);
+    }
+
+    /// <inheritdoc />
+    public async Task<AmountDueDto> CancelRedemptionAsync(long bookingId, int promotionId, Caller caller,
+        CancellationToken ct)
+    {
+        // booking-service solo le devuelve al cliente sus propias reservas
+        var booking = await _bookings.RequireForCustomerAsync(bookingId, ct);
+        // Con un pago en revisión o aprobado el monto ya quedó fijado: el cupón no se puede quitar.
+        await _guard.EnsureBookingIsUnpaidAsync(booking, allowOpenPayment: false, ct);
+
+        var redemption = await _redemptions.GetAsync(booking.Id, promotionId, ct)
+            ?? throw new NotFoundException(ErrorCodes.PromotionRedemptionNotFound, "Esa reserva no tiene ese cupón.");
+        _redemptions.Remove(redemption);
+        await _unitOfWork.CommitAsync(ct);
+
+        return await _amountDue.BreakdownAsync(booking, ct);
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
