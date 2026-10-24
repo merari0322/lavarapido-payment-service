@@ -11,11 +11,6 @@ namespace PaymentService.Application.Payments;
 //     Commands.
 
 /// <summary>
-/// Pago listo para mostrar: sus datos, el último comprobante, la cuenta y la reserva.
-/// Amount es lo que se espera cobrar; ReportedAmount, lo que el comprobante dice que se pagó (null
-/// si el cliente no lo indicó): el admin compara ambos antes de aprobar.
-/// </summary>
-/// <summary>
 /// Filtros del historial de pagos del cliente (RF-015): fechas de la reserva (incluidas) y una
 /// parte del nombre del servicio. Todo opcional.
 /// </summary>
@@ -24,6 +19,13 @@ public sealed record PaymentHistoryFilter(DateOnly? From, DateOnly? To, string? 
     public static readonly PaymentHistoryFilter None = new(null, null, null);
 }
 
+/// <summary>
+/// Pago listo para mostrar: sus datos, el último comprobante, la cuenta y la reserva.
+/// Amount es lo que se espera cobrar; ReportedAmount, lo que el comprobante dice que se pagó (null
+/// si el cliente no lo indicó): el admin compara ambos antes de aprobar.
+/// HasReceiptImage dice si el comprobante tiene imagen; la página de la cola del admin no la manda
+/// (ReceiptImage va en null, E-10) y la imagen se pide con el detalle del pago.
+/// </summary>
 public sealed record PaymentDto(
     long Id,
     string Status,
@@ -33,6 +35,7 @@ public sealed record PaymentDto(
     string? TransactionReference,
     decimal? ReportedAmount,
     string? ReceiptImage,
+    bool HasReceiptImage,
     DateTime? ReportedAtUtc,
     long? ReportedBy,
     PaymentAccountDto? Account,

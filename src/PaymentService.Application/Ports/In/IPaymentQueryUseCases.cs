@@ -1,3 +1,4 @@
+using PaymentService.Application.Common;
 using PaymentService.Application.Payments;
 
 namespace PaymentService.Application.Ports.In;
@@ -23,6 +24,12 @@ public interface IPaymentQueryUseCases
 
     /// <summary>Cola de revisión del admin, opcionalmente filtrada por estado (PENDING, IN_REVIEW...).</summary>
     Task<IReadOnlyList<PaymentDto>> ListAsync(string? status, CancellationToken ct);
+
+    /// <summary>
+    /// La misma cola por páginas (E-10): page desde 0, size de 1 a 100, sin la imagen del
+    /// comprobante (se pide con GetAsync). Solo consulta en booking-service las reservas de la página.
+    /// </summary>
+    Task<PageDto<PaymentDto>> ListPageAsync(string? status, int page, int size, CancellationToken ct);
 
     /// <summary>Cualquier pago, para el admin.</summary>
     Task<PaymentDto> GetAsync(long paymentId, CancellationToken ct);

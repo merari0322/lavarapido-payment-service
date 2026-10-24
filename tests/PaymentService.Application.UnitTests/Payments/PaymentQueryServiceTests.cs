@@ -59,6 +59,84 @@ public class PaymentQueryServiceTests
         Assert.Equal(ErrorCodes.BookingNotFound, error.Code);
     }
 
+    // ------------------------------------------------------------ E-10: cola del admin por páginas
+
+    private void FivePaymentsOnFiveBookings()
+    {
+        for (long id = 1; id <= 5; id++)
+        {
+            AddBooking(100 + id, "CONFIRMED");
+            AddPayment(Reported(100 + id));
+        }
+    }
+
+    [Fact]
+    public async Task ListPage_ReturnsThatPageMostRecentFirstWithTheTotals()
+    {
+        FivePaymentsOnFiveBookings();
+
+        var page = await _service.ListPageAsync(null, 1, 2, default);
+
+        Assert.Equal(new long[] { 3, 2 }, page.Items.Select(p => p.Id));
+        Assert.Equal(1, page.Page);
+        Assert.Equal(2, page.Size);
+        Assert.Equal(5, page.TotalElements);
+        Assert.Equal(3, page.TotalPages);
+        Assert.All(page.Items, p => Assert.NotNull(p.Booking));
+    }
+
+    [Fact]
+    public async Task ListPage_DoesNotSendTheReceiptImageButSaysThereIsOne()
+    {
+        AddPayment(Reported(BookingId));
+
+        var item = Assert.Single((await _service.ListPageAsync(null, 0, 20, default)).Items);
+        var detail = await _service.GetAsync(item.Id, default);
+
+        Assert.Null(item.ReceiptImage);
+        Assert.True(item.HasReceiptImage);
+        Assert.Equal("data:image/png;base64,AAA", detail.ReceiptImage);
+    }
+
+    [Fact]
+    public async Task List_WithoutPaging_KeepsTheImageForTheCurrentScreens()
+    {
+        AddPayment(Reported(BookingId));
+
+        var item = Assert.Single(await _service.ListAsync(null, default));
+
+        Assert.Equal("data:image/png;base64,AAA", item.ReceiptImage);
+        Assert.True(item.HasReceiptImage);
+    }
+
+    [Fact]
+    public async Task ListPage_OnlyLooksUpTheBookingsOfThatPage()
+    {
+        FivePaymentsOnFiveBookings();
+
+        await _service.ListPageAsync(null, 0, 2, default);
+
+        Assert.Equal(2, _bookings.AdminLookups);
+    }
+
+    [Fact]
+    public async Task ListPage_FiltersByStatusAndKeepsThePageWithinLimits()
+    {
+        FivePaymentsOnFiveBookings();
+        var approved = Reported(BookingId);
+        approved.Approve(1, FixedClock.Now);
+        AddPayment(approved);
+
+        var onlyApproved = await _service.ListPageAsync("approved", 0, 20, default);
+        var tooSmall = await _service.ListPageAsync(null, -3, 0, default);
+        var tooBig = await _service.ListPageAsync(null, 0, 500, default);
+
+        Assert.Equal("APPROVED", Assert.Single(onlyApproved.Items).Status);
+        Assert.Equal((0, 1), (tooSmall.Page, tooSmall.Size));
+        Assert.Equal(PaymentQueryService.MaxPageSize, tooBig.Size);
+        Assert.Equal(6, tooBig.Items.Count);
+    }
+
     // ------------------------------------------------------------ estado de pago por reserva
 
     [Fact]

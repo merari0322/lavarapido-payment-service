@@ -32,12 +32,16 @@ internal sealed class PaymentRepository : IPaymentRepository
         _db.Payments.AnyAsync(p => p.BookingId != bookingId
             && p.Receipts.Any(r => r.TransactionReference == transactionReference), ct);
 
-    public async Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int take, CancellationToken ct) =>
+    public async Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int skip, int take, CancellationToken ct) =>
         await WithReceipts
             .Where(p => status == null || p.Status == status)
             .OrderByDescending(p => p.Id)
+            .Skip(skip)
             .Take(take)
             .ToListAsync(ct);
+
+    public Task<int> CountAsync(PaymentStatus? status, CancellationToken ct) =>
+        _db.Payments.CountAsync(p => status == null || p.Status == status, ct);
 
     public async Task<IReadOnlyList<Payment>> ListForBookingsAsync(IReadOnlyCollection<long> bookingIds, CancellationToken ct) =>
         await WithReceipts
