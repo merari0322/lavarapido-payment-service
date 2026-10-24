@@ -302,6 +302,7 @@ Análisis y Desarrollo de Software (ADSO), ficha 3145556, SENA Regional Huila.
 | Manual de instalación | [09_MANUALES/ES/MD/manual-de-instalacion.md](https://github.com/BrayanCABRERA123/lavarapido-docs/blob/main/09_MANUALES/ES/MD/manual-de-instalacion.md) |
 | Levantar todo el sistema | [lavarapido-infra](https://github.com/BrayanCABRERA123/lavarapido-infra) (`docker compose --profile app up -d`) |
 | Aplicación desplegada | https://lavarapidovehicular.northcentralus.cloudapp.azure.com |
+| Despliegue continuo (CD) | [docs/despliegue-continuo.md](docs/despliegue-continuo.md) |
 
 **Ramas y commits:** se trabaja en `develop` con ramas `feature/`, `fix/` y `docs/` que se
 fusionan con `git merge --no-ff`; los commits siguen Conventional Commits
