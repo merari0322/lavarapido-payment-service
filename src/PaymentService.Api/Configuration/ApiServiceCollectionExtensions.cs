@@ -1,6 +1,8 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using PaymentService.Application.Common;
 
 namespace PaymentService.Api.Configuration;
 
@@ -52,6 +54,25 @@ internal static class ApiServiceCollectionExtensions
         services.AddAuthorization();
         return services;
     }
+
+    /// <summary>
+    /// Los 400 automáticos de [ApiController] (campo obligatorio que falta, JSON mal formado) salen
+    /// con code = VALIDATION_ERROR, igual que en los servicios Java, para que la web y la app los
+    /// traduzcan como cualquier otro error (BIZ-13, E-18). Se conserva la respuesta por defecto
+    /// (ValidationProblemDetails con el detalle de cada campo) y solo se le agrega el código.
+    /// </summary>
+    public static IMvcBuilder AddValidationErrorCode(this IMvcBuilder mvc) =>
+        mvc.ConfigureApiBehaviorOptions(options =>
+        {
+            var defaultResponse = options.InvalidModelStateResponseFactory;
+            options.InvalidModelStateResponseFactory = context =>
+            {
+                var response = defaultResponse(context);
+                if (response is ObjectResult { Value: ProblemDetails problem })
+                    problem.Extensions["code"] = ErrorCodes.ValidationError;
+                return response;
+            };
+        });
 
     /// <summary>CORS para la web (orígenes separados por coma en CORS_ALLOWED_ORIGINS).</summary>
     public static IServiceCollection AddConfiguredCors(this IServiceCollection services, IConfiguration config)
