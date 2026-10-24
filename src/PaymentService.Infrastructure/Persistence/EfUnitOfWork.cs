@@ -48,11 +48,11 @@ internal sealed class EfUnitOfWork : IUnitOfWork
             // Otro request cambió la misma fila entre que se leyó y se guardó.
             throw Conflict();
         }
-        catch (DbUpdateException e) when (e.InnerException is SqlException { Number: UniqueIndexViolation or UniqueConstraintViolation })
+        catch (DbUpdateException e) when (e.InnerException is SqlException { Number: UniqueIndexViolation or UniqueConstraintViolation } sql)
         {
             // Dos requests llegaron a la vez y la base (ux_payment_one_approved_per_booking,
             // uq_booking_promotion, ux_loyalty_transaction_customer_sequence...) frenó al segundo.
-            throw Conflict();
+            throw UniqueIndexConflicts.For(sql.Message) ?? Conflict();
         }
     }
 
@@ -83,4 +83,32 @@ internal sealed class EfUnitOfWork : IUnitOfWork
 
     private static ConflictException Conflict() =>
         new(ErrorCodes.DataConflict, "La operación choca con otro cambio que se acaba de guardar. Recarga e intenta de nuevo.");
+}
+
+/// <summary>
+/// Los índices únicos que protegen una regla de negocio y el 409 que corresponde a cada uno: el mismo
+/// código que lanza la validación del servicio, así la web y la app muestran el mismo mensaje haya
+/// ganado la validación o la base (A-16). SQL Server nombra el índice en el mensaje de los errores
+/// 2601/2627, en cualquier idioma.
+/// </summary>
+internal static class UniqueIndexConflicts
+{
+    private static readonly (string Index, string Code, string Message)[] Rules =
+    {
+        ("ux_payment_one_open_per_booking", ErrorCodes.PaymentAlreadyReported, "La reserva ya tiene un pago en revisión."),
+        ("ux_live_transaction_reference", ErrorCodes.TransactionReferenceReused,
+            "Esa referencia de transacción ya respalda otro pago."),
+        ("ux_payment_one_approved_per_booking", ErrorCodes.PaymentAlreadyApproved, "La reserva ya tiene un pago aprobado."),
+        ("ux_booking_promotion_one_per_booking", DomainErrorCodes.PromotionOnePerBooking,
+            "Esta reserva ya tiene un cupón. Quítalo si quieres usar otro.")
+    };
+
+    /// <summary>El 409 del índice nombrado en el mensaje, o null si es otro (queda DATA_CONFLICT).</summary>
+    public static ConflictException? For(string sqlMessage)
+    {
+        foreach (var (index, code, message) in Rules)
+            if (sqlMessage.Contains(index, StringComparison.OrdinalIgnoreCase))
+                return new ConflictException(code, message);
+        return null;
+    }
 }

@@ -109,6 +109,65 @@ public sealed class PersistenceTests
         Assert.False(await payments.IsTransactionReferenceUsedElsewhereAsync(reference, bookingId, default));
     }
 
+    // ---- A-16: la base garantiza un pago abierto por reserva y la referencia única entre pagos vivos ----
+
+    private async Task<Payment> ReportedAsync(long bookingId, string? reference) =>
+        Payment.ReportWithReceipt(bookingId, await CashAccountIdAsync(), 1_000m, Receipt, 5, reference, Now);
+
+    [IntegrationFact]
+    public async Task TwoOpenPaymentsForTheSameBookingAtOnce_TheSecondIsPaymentAlreadyReported()
+    {
+        // doble clic al reportar: los dos pasaron la validación antes de que el primero se guardara
+        var bookingId = DatabaseFixture.NewId();
+        await using var first = _db.NewRequest();
+        await using var second = _db.NewRequest();
+        Get<IPaymentRepository>(first).Add(await ReportedAsync(bookingId, null));
+        Get<IPaymentRepository>(second).Add(await ReportedAsync(bookingId, null));
+
+        await Get<IUnitOfWork>(first).CommitAsync(default);
+        var error = await Assert.ThrowsAsync<ConflictException>(() => Get<IUnitOfWork>(second).CommitAsync(default));
+
+        Assert.Equal("PAYMENT_ALREADY_REPORTED", error.Code);
+    }
+
+    [IntegrationFact]
+    public async Task TheSameReferenceOnTwoLivePayments_IsTransactionReferenceReused()
+    {
+        var reference = "REF-" + DatabaseFixture.NewId();
+        await using (var scope = _db.NewRequest())
+        {
+            Get<IPaymentRepository>(scope).Add(await ReportedAsync(DatabaseFixture.NewId(), reference));
+            await Get<IUnitOfWork>(scope).CommitAsync(default);
+        }
+
+        await using var other = _db.NewRequest();
+        Get<IPaymentRepository>(other).Add(await ReportedAsync(DatabaseFixture.NewId(), reference));
+        var error = await Assert.ThrowsAsync<ConflictException>(() => Get<IUnitOfWork>(other).CommitAsync(default));
+
+        Assert.Equal("TRANSACTION_REFERENCE_REUSED", error.Code);
+    }
+
+    [IntegrationFact]
+    public async Task TheSameReferenceAfterARejection_CanBeReportedAgain()
+    {
+        var reference = "REF-" + DatabaseFixture.NewId();
+        var bookingId = DatabaseFixture.NewId();
+        await using (var scope = _db.NewRequest())
+        {
+            var payment = await ReportedAsync(bookingId, reference);
+            Get<IPaymentRepository>(scope).Add(payment);
+            await Get<IUnitOfWork>(scope).CommitAsync(default);
+            payment.Reject(9, "No se lee", Now);
+            await Get<IUnitOfWork>(scope).CommitAsync(default);
+        }
+
+        await using var again = _db.NewRequest();
+        Get<IPaymentRepository>(again).Add(await ReportedAsync(bookingId, reference));
+        await Get<IUnitOfWork>(again).CommitAsync(default);
+
+        Assert.True(await Get<IPaymentRepository>(again).HasOpenPaymentAsync(bookingId, default));
+    }
+
     // ---- Promociones ----
 
     [IntegrationFact]
