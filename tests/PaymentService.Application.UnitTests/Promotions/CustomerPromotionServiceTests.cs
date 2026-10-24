@@ -122,6 +122,27 @@ public class CustomerPromotionServiceTests
     }
 
     [Fact]
+    public async Task ListAvailable_ShowsTheRealDiscountTypeAndValue()
+    {
+        // D-01: un cupón de monto fijo ya no se ve como "0 %"
+        var today = DateOnly.FromDateTime(FixedClock.Now);
+        _promotions.Add(Promotion.Create(new PromotionDefinition("FIJO5000", "Fijo", null, null, null, null, false,
+                Array.Empty<string>(), today.AddDays(-1), today.AddDays(30), DiscountType.FixedAmount, 5_000m, 0))
+            .WithId<Promotion, int>(3));
+
+        var promotions = await _service.ListAvailableAsync(Customer, default);
+
+        var fixedCoupon = Assert.Single(promotions, p => p.Code == "FIJO5000");
+        Assert.Equal("FIXED", fixedCoupon.DiscountType);
+        Assert.Equal(5_000m, fixedCoupon.DiscountValue);
+        Assert.Equal(0, fixedCoupon.DiscountPercent);
+        var percent = Assert.Single(promotions, p => p.Code == "VERANO10");
+        Assert.Equal("PERCENT", percent.DiscountType);
+        Assert.Equal(10m, percent.DiscountValue);
+        Assert.Equal(10, percent.DiscountPercent);
+    }
+
+    [Fact]
     public async Task Redeem_UnknownCode_IsNotFound()
     {
         var error = await Assert.ThrowsAsync<NotFoundException>(() =>

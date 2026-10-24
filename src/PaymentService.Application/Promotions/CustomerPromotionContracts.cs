@@ -1,6 +1,10 @@
 namespace PaymentService.Application.Promotions;
 
-/// <summary>Promoción vigente tal como la ve el cliente, marcando si ya la desbloqueó con sus puntos.</summary>
+/// <summary>
+/// Promoción vigente tal como la ve el cliente, marcando si ya la desbloqueó con sus puntos.
+/// DiscountType (PERCENT o FIXED) y DiscountValue (porcentaje o pesos) son el descuento real, igual
+/// que en PromotionDto del admin (D-01): DiscountPercent queda por compatibilidad y vale 0 en un FIXED.
+/// </summary>
 public sealed record PromotionForCustomerDto(
     int Id,
     string Code,
@@ -11,7 +15,9 @@ public sealed record PromotionForCustomerDto(
     IReadOnlyList<string> Benefits,
     int DiscountPercent,
     int RequiredPoints,
-    bool Unlocked);
+    bool Unlocked,
+    string DiscountType,
+    decimal DiscountValue);
 
 /// <summary>El cliente canjea un cupón (código de la promoción) en una de sus reservas.</summary>
 public sealed record RedeemPromotionCommand(long BookingId, string Code);
