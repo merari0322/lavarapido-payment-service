@@ -169,9 +169,6 @@ internal sealed class FakeRedemptionRepository : IPromotionRedemptionRepository
     public Task<int> CountByCustomerAsync(int promotionId, long customerUserId, CancellationToken ct) =>
         Task.FromResult(Saved.Count(r => r.PromotionId == promotionId && r.RedeemedBy == customerUserId));
 
-    public Task<decimal> AppliedDiscountTotalAsync(long bookingId, CancellationToken ct) =>
-        Task.FromResult(Saved.Where(r => r.BookingId == bookingId).Sum(r => r.AppliedAmount));
-
     public Task<IReadOnlyDictionary<int, RedemptionStats>> StatsByPromotionAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<int, RedemptionStats>>(Saved.GroupBy(r => r.PromotionId)
             .ToDictionary(g => g.Key, g => new RedemptionStats(g.Count(), g.Sum(r => r.AppliedAmount))));

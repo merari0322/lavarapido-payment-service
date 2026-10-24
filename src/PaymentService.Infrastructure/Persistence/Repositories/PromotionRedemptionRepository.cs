@@ -32,9 +32,6 @@ internal sealed class PromotionRedemptionRepository : IPromotionRedemptionReposi
     public Task<int> CountByCustomerAsync(int promotionId, long customerUserId, CancellationToken ct) =>
         _db.PromotionRedemptions.CountAsync(r => r.PromotionId == promotionId && r.RedeemedBy == customerUserId, ct);
 
-    public Task<decimal> AppliedDiscountTotalAsync(long bookingId, CancellationToken ct) =>
-        _db.PromotionRedemptions.Where(r => r.BookingId == bookingId).SumAsync(r => r.AppliedAmount, ct);
-
     public async Task<IReadOnlyDictionary<int, RedemptionStats>> StatsByPromotionAsync(CancellationToken ct)
     {
         // Se agrupa en la base: solo viaja una fila por promoción.
