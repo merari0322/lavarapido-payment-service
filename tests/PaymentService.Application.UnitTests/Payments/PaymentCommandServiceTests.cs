@@ -201,6 +201,38 @@ public class PaymentCommandServiceTests
     }
 
     [Fact]
+    public async Task Approve_WhenTheBookingTotalChangedAfterReporting_IsAmountChangedAndCreditsNoPoints()
+    {
+        // BIZ-01: el cliente reportó 50.000 y después la reserva se reprogramó con otros servicios
+        var paymentId = await ReportedPaymentAsync();
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Total = 65_000m };
+        var commitsBefore = _uow.Commits;
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() => _service.ApproveAsync(paymentId, Admin, default));
+
+        Assert.Equal(ErrorCodes.AmountChanged, error.Code);
+        Assert.Equal(PaymentStatus.InReview, (await _payments.GetByIdAsync(paymentId, default))!.Status);
+        Assert.Equal(commitsBefore, _uow.Commits);
+        Assert.Empty(_ledger.Saved);
+        Assert.Empty(_events.Published);
+    }
+
+    [Fact]
+    public async Task Approve_WhenTheAmountChanged_TheAdminCanStillRejectItAndTheCustomerPaysTheNewAmount()
+    {
+        var paymentId = await ReportedPaymentAsync();
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Total = 65_000m };
+
+        await _service.RejectAsync(paymentId, "La reserva cambió de valor", Admin, default);
+        var again = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, "REF-2", "data:image/png;base64,BBB"),
+            Customer, default);
+        var approved = await _service.ApproveAsync(again.Id, Admin, default);
+
+        Assert.Equal(65_000m, approved.Amount);
+        Assert.Equal("APPROVED", approved.Status);
+    }
+
+    [Fact]
     public async Task Report_ShowsTheAdminWhatTheCustomerSaysTheyPaid()
     {
         var dto = await _service.ReportAsync(

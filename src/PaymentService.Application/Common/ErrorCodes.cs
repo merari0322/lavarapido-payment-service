@@ -16,6 +16,8 @@ public static class ErrorCodes
     public const string PaymentNotFound = "PAYMENT_NOT_FOUND";
     public const string PaymentAlreadyApproved = "PAYMENT_ALREADY_APPROVED";
     public const string PaymentAlreadyReported = "PAYMENT_ALREADY_REPORTED";
+    /// <summary>Al aprobar, el monto del pago ya no es lo que se debe hoy de la reserva (BIZ-01).</summary>
+    public const string AmountChanged = "AMOUNT_CHANGED";
     public const string TransactionReferenceReused = "TRANSACTION_REFERENCE_REUSED";
     public const string InvalidDateRange = "INVALID_DATE_RANGE";
 

@@ -1,4 +1,5 @@
 using PaymentService.Application.Common;
+using PaymentService.Application.Common.Exceptions;
 using PaymentService.Application.Loyalty;
 using PaymentService.Application.Ports.In;
 using PaymentService.Application.Ports.Out.Integration;
@@ -94,6 +95,7 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
         // Si la reserva se canceló mientras el pago esperaba revisión, ya no se aprueba: se rechaza
         // (o se devuelve el dinero por fuera) en lugar de acreditar puntos de una reserva que no fue.
         _guard.EnsureBookingIsPayable(booking);
+        await EnsureAmountStillDueAsync(payment, booking, ct);
 
         var now = Now;
         payment.Approve(admin.UserId, now);
@@ -129,6 +131,20 @@ public sealed class PaymentCommandService : IPaymentCommandUseCases
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+    /// <summary>
+    /// BIZ-01: el monto del pago quedó fijado al reportarlo. Si la reserva cambió después (por ejemplo,
+    /// se reprogramó con otros servicios), no se aprueba un monto viejo: 409 AMOUNT_CHANGED para que el
+    /// admin lo rechace y el cliente pague lo que se debe hoy.
+    /// </summary>
+    private async Task EnsureAmountStillDueAsync(Payment payment, BookingInfo booking, CancellationToken ct)
+    {
+        var amountDue = await _amountDue.ForAsync(booking, ct);
+        if (!PaymentPolicy.AmountStillMatches(payment.Amount, amountDue))
+            throw new ConflictException(ErrorCodes.AmountChanged,
+                $"La reserva cambió desde que se reportó el pago: el pago es por {payment.Amount:N0} y hoy se deben " +
+                $"{amountDue:N0}. Rechaza el pago para que el cliente pague el monto nuevo.");
+    }
 
     /// <summary>Pasos 5 y 6 del guion: confirmar, publicar los eventos del pago y devolver su vista.</summary>
     private async Task<PaymentDto> CompleteAsync(Payment payment, BookingInfo? booking, CancellationToken ct)

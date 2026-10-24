@@ -31,4 +31,12 @@ public static class PaymentPolicy
     /// </summary>
     public static decimal AmountDue(decimal bookingTotal, decimal appliedDiscounts) =>
         Math.Max(bookingTotal - appliedDiscounts, 0m);
+
+    /// <summary>
+    /// El monto con el que se reportó el pago sigue siendo lo que se debe hoy (BIZ-01). Si la reserva
+    /// cambió después de reportarlo (otros servicios, otro total), aprobarlo cobraría una cifra vieja.
+    /// Se compara en centavos, que es la precisión con la que se guarda el pago.
+    /// </summary>
+    public static bool AmountStillMatches(decimal paymentAmount, decimal amountDue) =>
+        Math.Round(paymentAmount, 2, MidpointRounding.AwayFromZero) == Math.Round(amountDue, 2, MidpointRounding.AwayFromZero);
 }
