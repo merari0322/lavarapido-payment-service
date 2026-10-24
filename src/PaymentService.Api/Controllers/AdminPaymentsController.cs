@@ -22,10 +22,21 @@ public sealed class AdminPaymentsController : ControllerBase
         _queries = queries;
     }
 
-    /// <summary>Cola de pagos, opcionalmente filtrada por estado (PENDING, IN_REVIEW, APPROVED, REJECTED, REFUNDED).</summary>
+    /// <summary>
+    /// Cola de pagos, los más recientes primero, opcionalmente filtrada por estado (PENDING,
+    /// IN_REVIEW, APPROVED, REJECTED, REFUNDED).
+    /// E-10: con page o size responde una página {items, page, size, totalElements, totalPages}
+    /// (page desde 0; size de 1 a 100, 20 por defecto) sin la imagen del comprobante: hasReceiptImage
+    /// dice si tiene y la imagen se pide con GET /admin/payments/{id}. Sin page ni size responde el
+    /// arreglo de siempre (hasta 200 pagos, con imagen) para que la web y la app actuales no cambien.
+    /// </summary>
     [HttpGet]
-    public Task<IReadOnlyList<PaymentDto>> List([FromQuery] string? status, CancellationToken ct) =>
-        _queries.ListAsync(status, ct);
+    public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] int? page, [FromQuery] int? size,
+        CancellationToken ct)
+    {
+        if (page is null && size is null) return Ok(await _queries.ListAsync(status, ct));
+        return Ok(await _queries.ListPageAsync(status, page ?? 0, size ?? PaymentQueryService.DefaultPageSize, ct));
+    }
 
     [HttpGet("{id:long}")]
     public Task<PaymentDto> Get(long id, CancellationToken ct) => _queries.GetAsync(id, ct);

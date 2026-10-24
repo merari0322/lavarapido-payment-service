@@ -21,8 +21,11 @@ public interface IPaymentRepository
     /// </summary>
     Task<bool> IsTransactionReferenceUsedElsewhereAsync(string transactionReference, long bookingId, CancellationToken ct);
 
-    /// <summary>Los más recientes primero, opcionalmente filtrados por estado.</summary>
-    Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int take, CancellationToken ct);
+    /// <summary>Los más recientes primero, opcionalmente filtrados por estado, saltando los primeros skip.</summary>
+    Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int skip, int take, CancellationToken ct);
+
+    /// <summary>Cuántos pagos hay, opcionalmente de un estado (total de la página de la cola, E-10).</summary>
+    Task<int> CountAsync(PaymentStatus? status, CancellationToken ct);
 
     Task<IReadOnlyList<Payment>> ListForBookingsAsync(IReadOnlyCollection<long> bookingIds, CancellationToken ct);
 

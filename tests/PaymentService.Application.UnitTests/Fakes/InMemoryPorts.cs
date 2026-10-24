@@ -64,8 +64,12 @@ internal sealed class FakePaymentRepository : IPaymentRepository
     public Task<bool> IsTransactionReferenceUsedElsewhereAsync(string reference, long bookingId, CancellationToken ct) =>
         Task.FromResult(Saved.Any(p => p.BookingId != bookingId && p.Receipts.Any(r => r.TransactionReference == reference)));
 
-    public Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int take, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<Payment>>(Saved.Where(p => status == null || p.Status == status).Take(take).ToList());
+    public Task<IReadOnlyList<Payment>> ListAsync(PaymentStatus? status, int skip, int take, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<Payment>>(Saved.Where(p => status == null || p.Status == status)
+            .OrderByDescending(p => p.Id).Skip(skip).Take(take).ToList());
+
+    public Task<int> CountAsync(PaymentStatus? status, CancellationToken ct) =>
+        Task.FromResult(Saved.Count(p => status == null || p.Status == status));
 
     public Task<IReadOnlyList<Payment>> ListForBookingsAsync(IReadOnlyCollection<long> bookingIds, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Payment>>(Saved.Where(p => bookingIds.Contains(p.BookingId)).ToList());
@@ -184,7 +188,14 @@ internal sealed class FakeBookingDirectory : IBookingDirectory
 
     public Task<BookingInfo?> GetForCustomerAsync(long bookingId, CancellationToken ct) => Task.FromResult(Bookings.GetValueOrDefault(bookingId));
     public Task<IReadOnlyList<BookingInfo>> MineAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingInfo>>(Bookings.Values.ToList());
-    public Task<BookingInfo?> GetForAdminAsync(long bookingId, CancellationToken ct) => Task.FromResult(Bookings.GetValueOrDefault(bookingId));
+    /// <summary>Cuántas reservas se pidieron como admin (cada una es una llamada HTTP a booking-service).</summary>
+    public int AdminLookups { get; private set; }
+
+    public Task<BookingInfo?> GetForAdminAsync(long bookingId, CancellationToken ct)
+    {
+        AdminLookups++;
+        return Task.FromResult(Bookings.GetValueOrDefault(bookingId));
+    }
 }
 
 internal sealed class RecordingPublisher : IIntegrationEventPublisher

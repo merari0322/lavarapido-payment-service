@@ -13,8 +13,12 @@ namespace PaymentService.Application.Payments;
 /// </summary>
 public sealed class PaymentQueryService : IPaymentQueryUseCases
 {
-    // Tope de la cola del admin: los más recientes primero.
+    // Tope de la cola del admin sin paginar: los más recientes primero.
     private const int AdminListLimit = 200;
+
+    // Página de la cola del admin (E-10): la misma convención que los listados de security-service.
+    public const int DefaultPageSize = 20;
+    public const int MaxPageSize = 100;
 
     private readonly IPaymentRepository _payments;
     private readonly IBookingDirectory _bookings;
@@ -93,15 +97,35 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
     /// <inheritdoc />
     public async Task<IReadOnlyList<PaymentDto>> ListAsync(string? status, CancellationToken ct)
     {
-        PaymentStatus? filter = string.IsNullOrWhiteSpace(status) ? null : PaymentStatusCodes.Parse(status);
-        var payments = await _payments.ListAsync(filter, AdminListLimit, ct);
+        var payments = await _payments.ListAsync(ParseStatus(status), 0, AdminListLimit, ct);
+        return await _dtos.ToDtosAsync(payments, await AdminBookingsAsync(payments, ct), ct);
+    }
 
-        // Las reservas se piden en paralelo (son llamadas HTTP independientes a booking-service).
+    /// <inheritdoc />
+    public async Task<PageDto<PaymentDto>> ListPageAsync(string? status, int page, int size, CancellationToken ct)
+    {
+        var filter = ParseStatus(status);
+        var pageIndex = Math.Max(page, 0);
+        var pageSize = Math.Clamp(size, 1, MaxPageSize);
+
+        // Las consultas van una por una: la persistencia no admite operaciones en paralelo.
+        var total = await _payments.CountAsync(filter, ct);
+        var payments = await _payments.ListAsync(filter, pageIndex * pageSize, pageSize, ct);
+        var items = await _dtos.ToDtosAsync(payments, await AdminBookingsAsync(payments, ct), ct,
+            includeReceiptImage: false);
+        return PageDto<PaymentDto>.Of(items, pageIndex, pageSize, total);
+    }
+
+    private static PaymentStatus? ParseStatus(string? status) =>
+        string.IsNullOrWhiteSpace(status) ? null : PaymentStatusCodes.Parse(status);
+
+    // Las reservas se piden en paralelo (son llamadas HTTP independientes a booking-service).
+    private async Task<IReadOnlyDictionary<long, BookingInfo>> AdminBookingsAsync(IEnumerable<Payment> payments,
+        CancellationToken ct)
+    {
         var lookups = payments.Select(p => p.BookingId).Distinct()
             .Select(id => _bookings.GetForAdminAsync(id, ct));
-        var bookings = (await Task.WhenAll(lookups)).OfType<BookingInfo>().ToDictionary(b => b.Id);
-
-        return await _dtos.ToDtosAsync(payments, bookings, ct);
+        return (await Task.WhenAll(lookups)).OfType<BookingInfo>().ToDictionary(b => b.Id);
     }
 
     /// <inheritdoc />
