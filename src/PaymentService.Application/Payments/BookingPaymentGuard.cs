@@ -58,19 +58,21 @@ public sealed class BookingPaymentGuard
     /// Devuelve la cuenta si existe y está activa. Cuando el pago lo reporta el cliente
     /// (forCustomerReport) el medio además debe exigir comprobante: el efectivo solo lo registra el
     /// admin en el lavadero.
+    /// C-04: desactivar la cuenta de efectivo solo deja de ofrecérsela a los clientes; el admin sigue
+    /// registrando en caja el efectivo que recibe. Las demás cuentas inactivas no se usan para nadie.
     /// </summary>
     public async Task<PaymentAccount> GetUsableAccountAsync(short accountId, bool forCustomerReport, CancellationToken ct)
     {
-        var account = await _accounts.GetByIdAsync(accountId, ct);
-        if (account is null || !account.IsActive)
-            throw InvalidAccount("La cuenta de pago no existe o no está activa.");
+        var account = await _accounts.GetByIdAsync(accountId, ct)
+            ?? throw InvalidAccount("La cuenta de pago no existe o no está activa.");
+        var method = await _accounts.GetMethodTypeAsync(account.PaymentMethodTypeId, ct);
+        // el medio que no exige comprobante es el que se paga en persona (efectivo)
+        var paidInPerson = method is { RequiresReceipt: false };
 
-        if (forCustomerReport)
-        {
-            var method = await _accounts.GetMethodTypeAsync(account.PaymentMethodTypeId, ct);
-            if (method is null || !method.RequiresReceipt)
-                throw InvalidAccount("Este medio de pago se paga directamente en el lavadero.");
-        }
+        if (!account.IsActive && (forCustomerReport || !paidInPerson))
+            throw InvalidAccount("La cuenta de pago no existe o no está activa.");
+        if (forCustomerReport && (method is null || paidInPerson))
+            throw InvalidAccount("Este medio de pago se paga directamente en el lavadero.");
         return account;
     }
 
