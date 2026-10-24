@@ -29,4 +29,7 @@ public static class ErrorCodes
     public const string PromotionRedemptionNotFound = "PROMOTION_REDEMPTION_NOT_FOUND";
 
     public const string DataConflict = "DATA_CONFLICT";
+
+    /// <summary>El cuerpo o los parámetros no son válidos (falta un campo obligatorio, JSON mal formado). Igual que los servicios Java.</summary>
+    public const string ValidationError = "VALIDATION_ERROR";
 }

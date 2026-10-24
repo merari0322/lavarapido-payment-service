@@ -25,7 +25,7 @@ builder.Services.Configure<KestrelServerOptions>(o => o.Limits.MaxRequestBodySiz
 
 builder.Services.AddJwtAuthentication(config);
 builder.Services.AddConfiguredCors(config);
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddValidationErrorCode();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
