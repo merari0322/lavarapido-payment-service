@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using PaymentService.Api.Configuration;
 using PaymentService.Api.Errors;
@@ -17,11 +19,17 @@ EnvFile.Load();
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
-builder.WebHost.UseUrls($"http://0.0.0.0:{config["PAYMENT_PORT"] ?? "3005"}");
 config.EnsurePaymentConnectionString();
 
-// El comprobante y el QR viajan como imagen (data URL) en el cuerpo.
-builder.Services.Configure<KestrelServerOptions>(o => o.Limits.MaxRequestBodySize = 8 * 1024 * 1024);
+builder.Services.Configure<KestrelServerOptions>(o =>
+{
+    // Escucha en todas las interfaces del contenedor, en PAYMENT_PORT (3005). Va sin TLS a propósito,
+    // como los servicios Java: solo lo alcanza la red interna de Docker y el HTTPS lo termina el
+    // proxy de entrada antes del api-gateway (S5332).
+    o.Listen(IPAddress.Any, int.Parse(config["PAYMENT_PORT"] ?? "3005", CultureInfo.InvariantCulture));
+    // El comprobante y el QR viajan como imagen (data URL) en el cuerpo.
+    o.Limits.MaxRequestBodySize = 8 * 1024 * 1024;
+});
 
 builder.Services.AddJwtAuthentication(config);
 builder.Services.AddConfiguredCors(config);
