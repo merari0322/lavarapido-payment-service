@@ -7,4 +7,8 @@
 	  <ProjectReference Include="..\PaymentService.Infrastructure\PaymentService.Infrastructure.csproj" />
 	  <ProjectReference Include="..\PaymentService.Application\PaymentService.Application.csproj" />
 	</ItemGroup>
+	<ItemGroup>
+		<!-- F-04: las pruebas de roles usan la misma configuración JWT del servicio (AddJwtAuthentication) -->
+		<InternalsVisibleTo Include="PaymentService.Api.UnitTests" />
+	</ItemGroup>
 </Project>
