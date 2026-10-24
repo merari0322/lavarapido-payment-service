@@ -53,7 +53,9 @@ public sealed class PaymentDtoAssembler
             receipt?.UploadedAtUtc,
             receipt?.UploadedBy,
             accounts.GetValueOrDefault(payment.PaymentAccountId),
-            booking is null ? null : ToDto(booking));
+            booking is null ? null : ToDto(booking),
+            // BIZ-07: el estado actual de la reserva ya viene de booking-service para mostrarla
+            booking is not null && PaymentPolicy.IsBookingCancelled(booking.Status));
     }
 
     private static PaymentBookingDto ToDto(BookingInfo b) =>

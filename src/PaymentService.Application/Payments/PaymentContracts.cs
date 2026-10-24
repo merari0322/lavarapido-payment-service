@@ -25,6 +25,8 @@ public sealed record PaymentHistoryFilter(DateOnly? From, DateOnly? To, string? 
 /// si el cliente no lo indicó): el admin compara ambos antes de aprobar.
 /// HasReceiptImage dice si el comprobante tiene imagen; la página de la cola del admin no la manda
 /// (ReceiptImage va en null, E-10) y la imagen se pide con el detalle del pago.
+/// BookingCancelled (BIZ-07) es true si booking-service dice hoy que la reserva está cancelada: con
+/// un pago APPROVED el admin debe reembolsarlo; con uno IN_REVIEW, rechazarlo.
 /// </summary>
 public sealed record PaymentDto(
     long Id,
@@ -39,7 +41,8 @@ public sealed record PaymentDto(
     DateTime? ReportedAtUtc,
     long? ReportedBy,
     PaymentAccountDto? Account,
-    PaymentBookingDto? Booking);
+    PaymentBookingDto? Booking,
+    bool BookingCancelled);
 
 /// <summary>
 /// Lo que falta por pagar de una reserva: su total, lo ya descontado por cupones y la diferencia,

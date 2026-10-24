@@ -16,6 +16,13 @@ public static class PaymentPolicy
     public static bool IsBookingPayable(string bookingStatus) => PayableBookingStatuses.Contains(bookingStatus);
 
     /// <summary>
+    /// La reserva se canceló (BIZ-07). Si su pago ya estaba aprobado, el admin tiene que devolver el
+    /// dinero (reembolso, que también revierte los puntos); si está en revisión, rechazarlo.
+    /// </summary>
+    public static bool IsBookingCancelled(string bookingStatus) =>
+        string.Equals(bookingStatus, "CANCELLED", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// El cliente todavía puede reportar un pago de esta reserva: está en un estado pagable, no tiene
     /// un pago aprobado y no tiene uno abierto (pendiente o en revisión). Es la misma regla que aplica
     /// BookingPaymentGuard al reportar; se expone para que las pantallas muestren "Pagar" sin repetirla.
