@@ -123,7 +123,11 @@ src/
   agrega `AccessTokenForwardingHandler`.
 - **Concurrencia**: `row_version` es token optimista en todas las tablas y un aggregate con eventos
   pendientes cuenta como modificado; el ledger tiene una posición única por cliente (`sequence_no`).
-  Cualquier choque llega al cliente como 409 `DATA_CONFLICT`.
+  Un choque con un índice único que protege una regla responde 409 con el código de esa regla
+  (`PAYMENT_ALREADY_REPORTED`, `TRANSACTION_REFERENCE_REUSED`, `PAYMENT_ALREADY_APPROVED`,
+  `PROMOTION_ONE_PER_BOOKING`); cualquier otro choque, 409 `DATA_CONFLICT`.
+- **Validación**: un cuerpo sin un campo obligatorio (`bookingId`, `paymentAccountId`) o con JSON mal
+  formado responde 400 con `code` = `VALIDATION_ERROR`, igual que los servicios Java.
 
 ### Patrones aplicados
 
@@ -147,13 +151,13 @@ src/
 
 | Tabla | Modelo | Reglas que se hacen cumplir |
 |-------|--------|-----------------------------|
-| `payment.payment` | `Payment` | monto > 0; estados PENDING → IN_REVIEW → APPROVED/REJECTED → REFUNDED; un solo APPROVED por reserva (validación + índice filtrado → 409) |
-| `payment.payment_receipt` | `PaymentReceipt` | `reviewed_at`/`reviewed_by` siempre juntos (se llenan al aprobar/rechazar); antifraude: la misma `transaction_reference` no puede pagar dos reservas (409 `TRANSACTION_REFERENCE_REUSED`) |
-| `payment.payment_account` / `payment_method_type` | `PaymentAccount`, `PaymentMethodType` | el cliente solo reporta a medios con `requires_receipt`; el efectivo lo registra el admin |
+| `payment.payment` | `Payment` | monto > 0; estados PENDING → IN_REVIEW → APPROVED/REJECTED → REFUNDED; un solo APPROVED por reserva (validación + índice filtrado → 409); un solo pago abierto (PENDING o IN_REVIEW) por reserva (validación + índice filtrado de la migración 023 → 409 `PAYMENT_ALREADY_REPORTED`); al aprobar, el monto debe seguir siendo lo que se debe hoy (409 `AMOUNT_CHANGED`) |
+| `payment.payment_receipt` | `PaymentReceipt` | `reviewed_at`/`reviewed_by` siempre juntos (se llenan al aprobar/rechazar); antifraude: la misma `transaction_reference` no puede pagar dos reservas (validación) ni respaldar dos pagos vivos (vista indexada `v_live_transaction_reference`, migración 023) → 409 `TRANSACTION_REFERENCE_REUSED` |
+| `payment.payment_account` / `payment_method_type` | `PaymentAccount`, `PaymentMethodType` | el cliente solo reporta a medios con `requires_receipt`; el efectivo lo registra el admin, también con la cuenta de efectivo desactivada (desactivarla solo la oculta a los clientes) |
 | `payment.payment_status` | `PaymentStatus` (IDs fijos en `PaymentStatusIds`, Infrastructure) | IDs verificados por las migraciones 015 y 019 |
 | `payment.loyalty_transaction` / `loyalty_movement_type` | `LoyaltyTransaction`, `LoyaltyMovementType` (ID resuelto por código al arrancar, `CatalogIds`) | ledger append-only; `balance_after` nunca negativo; `sequence_no` único por cliente (migración 020); acreditación idempotente por puntos netos de la reserva; el reembolso los revierte (`REVERSED`) |
 | `promotion.promotion` / `discount_type` | `Promotion`, `DiscountType` (ID resuelto por código al arrancar: SQL Server puede saltar IDENTITY) | vigencia, puntos requeridos, `min_purchase_amount`, `max_discount_amount`, `max_redemptions`, `max_redemptions_per_customer` |
-| `promotion.booking_promotion` | `PromotionRedemption` | una vez por reserva; `applied_amount > 0` congelado al canjear |
+| `promotion.booking_promotion` | `PromotionRedemption` | una sola promoción por reserva (índice de la migración 021); `applied_amount > 0` es lo que descontó el día del canje; un cupón porcentual guarda su porcentaje y su tope (migración 022) y se recalcula con el total de hoy de la reserva, sin dejarla nunca en 0 |
 | `promotion.promotion_customer`, `promotion_service`, columnas `is_public` y `min_completed_booking` | — | **no modelados todavía**: evaluarlos necesita datos de customer-service y booking-service que hoy no se exponen; las filas conservan sus valores por defecto |
 
 ### Eventos que publica (carwash.events, con `MESSAGING_ENABLED=true`)
@@ -168,6 +172,28 @@ src/
 
 En las promociones, `price` y `durationMinutes` son opcionales: la web y la app ya no los piden (el
 cupón es un descuento sobre la reserva, ADR-015 sección 5). Si llegan, deben ser mayores que cero.
+
+### Endpoints nuevos o que cambiaron (23-10-2026)
+
+La tabla completa de endpoints está en [docs/GUIA-PAYMENT-SERVICE.md](docs/GUIA-PAYMENT-SERVICE.md#73-endpoints).
+Todas las rutas empiezan con `/api/v1`.
+
+| Método y ruta | Rol | Qué cambió |
+|---|---|---|
+| `GET /loyalty/redemptions/{bookingId}` | CLIENT | Nuevo (BIZ-02): `{bookingId, bookingTotal, appliedDiscounts, amountDue, redemption}`; `redemption` es `{promotionId, promotionCode, promotionName, discountAmount}` o `null`. Reserva ajena → 404 `BOOKING_NOT_FOUND` |
+| `DELETE /loyalty/redemptions/{bookingId}/{promotionId}` | CLIENT | Quitar el cupón (E-08); una sola promoción por reserva (E-09) |
+| `GET /admin/payments?status=&page=&size=` | ADMIN | Con `page` o `size` (E-10) responde `{items, page, size, totalElements, totalPages}` (page desde 0, size 1-100, 20 por defecto) sin la imagen del comprobante; sin ellos, el arreglo de siempre (hasta 200, con imagen) |
+| `GET /admin/payments/{id}` | ADMIN | Es la forma de pedir la imagen del comprobante de un pago de la página |
+| `POST /admin/payments/{id}/approve` | ADMIN | 409 `AMOUNT_CHANGED` si el monto del pago ya no es lo que se debe hoy de la reserva (BIZ-01) |
+| `POST /payments`, `POST /admin/payments`, `POST /loyalty/redeem` | — | `bookingId` y `paymentAccountId` obligatorios: 400 `VALIDATION_ERROR` si faltan (BIZ-13) |
+
+Campos nuevos en las respuestas (los anteriores no cambian):
+
+- `PaymentDto.hasReceiptImage`: si el comprobante tiene imagen (E-10).
+- `PaymentDto.bookingCancelled`: la reserva está cancelada hoy en booking-service; con un pago
+  `APPROVED` el admin debe reembolsarlo, con uno `IN_REVIEW`, rechazarlo (BIZ-07).
+- `PromotionForCustomerDto.discountType` (`PERCENT` o `FIXED`) y `discountValue` (D-01), los mismos
+  que ya tenía `PromotionDto` del admin.
 
 ## Levantarlo con el resto del backend (recomendado)
 
@@ -202,7 +228,7 @@ No cambies la versión a net10.0 en Visual Studio 2022: esa versión pide Visual
 2. Espera a que termine de restaurar paquetes NuGet (barra inferior). Necesita internet la primera vez.
 3. Clic derecho en `PaymentService.Api` > Establecer como proyecto de inicio.
 4. Ctrl+Shift+B para compilar. Menú Prueba > Explorador de pruebas para correr los tests.
-5. F5 para levantar la API (escucha en http://localhost:5080).
+5. F5 para levantar la API (escucha en http://localhost:3005, o en el puerto de `PAYMENT_PORT`).
 
 Requiere la carga de trabajo "ASP.NET y desarrollo web" del instalador de Visual Studio.
 
@@ -213,9 +239,12 @@ dotnet build
 dotnet test
 ```
 
-Esperado: `Build succeeded` con 0 errores, y 177 pruebas pasadas al 24-10-2026 (119 del dominio,
-26 de autorización por rol de la API (F-04) y 32 de los casos de uso, que prueban Application con dobles en memoria de sus puertos de salida), más
-las 7 de integración, que salen como omitidas si no se configura su base (ver abajo).
+Esperado: `Build succeeded` con 0 errores, y 225 pruebas pasadas al 24-10-2026 (con los arreglos del
+23-10 fusionados): 134 del dominio, 52 de los casos de uso (prueban Application con dobles en
+memoria de sus puertos de salida), 34 de la capa HTTP (`PaymentService.Api.UnitTests`: 27 de
+autorización por rol (F-04) y 7 de campos obligatorios y formato de los errores de validación) y 5
+de infraestructura que no necesitan base (qué 409 corresponde a cada índice único). Además hay 11
+de integración, que salen como omitidas si no se configura su base (ver abajo).
 
 ### Pruebas de integración (contra SQL Server real, opcionales)
 
@@ -244,7 +273,7 @@ $env:PAYMENT_INTEGRATION_DB = "Server=localhost,1434;Database=lavado_vehicular;U
 dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 
-Sin la variable, estas 7 pruebas aparecen como **omitidas** (no fallan). Para borrar la base de
+Sin la variable, estas 11 pruebas aparecen como **omitidas** (no fallan). Para borrar la base de
 prueba y empezar de cero: `docker compose down -v`.
 
 ## 3. Levantar la API y ver que responde
@@ -256,7 +285,7 @@ dotnet run --project src/PaymentService.Api
 En otra terminal:
 
 ```bash
-curl http://localhost:5080/health
+curl http://localhost:3005/health
 ```
 
 Esperado: `{"service":"payment-service","status":"ok"}`

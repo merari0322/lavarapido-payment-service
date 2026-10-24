@@ -166,7 +166,7 @@ src/
 ## 4. Capa de dominio
 
 Aquí están **todas las reglas del negocio**. Ninguna clase de esta capa sabe de base de datos ni
-HTTP; por eso se puede probar con pruebas unitarias simples (97 pruebas).
+HTTP; por eso se puede probar con pruebas unitarias simples (134 pruebas).
 
 ### 4.1 Bloques comunes (`Domain/Common`)
 
@@ -279,8 +279,10 @@ El estado que ve el admin (`active`, `scheduled`, `paused`) **se calcula**, no s
 5. No superó el límite total de usos.
 6. El cliente no superó su límite personal.
 
-Si todo pasa, crea un `PromotionRedemption` con el descuento **congelado** y registra el evento
-`PromotionRedeemed`. El número de usos no se guarda en la promoción: se cuenta a partir de los
+Si todo pasa, crea un `PromotionRedemption` con el descuento del día (`AppliedAmount`) y registra el
+evento `PromotionRedeemed`. Un cupón porcentual guarda además su porcentaje y su tope: si la reserva
+cambia de total, `PromotionRedemption.DiscountOn` lo recalcula (BIZ-05); uno de monto fijo sigue
+descontando lo mismo. Con los mismos topes del canje, nunca deja la reserva en 0 (E-07). El número de usos no se guarda en la promoción: se cuenta a partir de los
 canjes, para no tener un contador que se desincronice.
 
 #### Patrón Strategy para los descuentos (`Promotions/Discounts`)
@@ -433,7 +435,10 @@ Todos los repositorios del request comparten el mismo `DbContext` (Scoped), así
 - Un aggregate con eventos pendientes cuenta como modificado aunque sus datos no cambien. Ejemplo:
   una promoción que consumió un uso. Así dos canjes simultáneos chocan en vez de saltarse el límite.
 
-Si la base detecta un choque (concurrencia o índice único) se traduce a **409 `DATA_CONFLICT`**.
+Si la base detecta un choque se traduce a 409: un índice único que protege una regla responde con
+el código de esa regla (`UniqueIndexConflicts`: `PAYMENT_ALREADY_REPORTED`,
+`TRANSACTION_REFERENCE_REUSED`, `PAYMENT_ALREADY_APPROVED`, `PROMOTION_ONE_PER_BOOKING`); cualquier
+otro choque (concurrencia, otro índice), **409 `DATA_CONFLICT`**.
 
 ### 6.3 Catálogos: `CatalogIds` y `PaymentStatusIds`
 
@@ -495,22 +500,28 @@ Todas las rutas empiezan con `/api/v1`.
 |--------|------|----------|-----------|
 | GET | `/payment-accounts` | Cuentas activas que reciben comprobante (con QR). *Cualquier usuario autenticado.* | `PaymentAccountDto[]` |
 | POST | `/payments` | Reportar un pago `{bookingId, paymentAccountId, transactionReference, receiptImage, reportedAmount?}` | 201 `PaymentDto` (`IN_REVIEW`) |
-| GET | `/payments/me` | Pagos de mis reservas (más reciente primero) | `PaymentDto[]` |
+| GET | `/payments/me?from=&to=&service=` | Pagos de mis reservas (más reciente primero), filtros opcionales (RF-015) | `PaymentDto[]` |
+| GET | `/payments/me/bookings` | Cada reserva mía con el estado de su último pago y si se puede pagar | `{bookingId, paymentStatus, payable}[]` |
 | GET | `/payments/{id}` | Un pago mío (404 si es de otro) | `PaymentDto` |
 | GET | `/loyalty/balance` | Mi saldo de puntos | `{points}` |
-| GET | `/loyalty/promotions` | Promociones vigentes, marcando cuáles desbloqueé | `PromotionForCustomerDto[]` |
+| GET | `/loyalty/promotions` | Promociones vigentes, marcando cuáles desbloqueé; con `discountType` (`PERCENT`/`FIXED`) y `discountValue` (D-01) | `PromotionForCustomerDto[]` |
 | POST | `/loyalty/redeem` | Canjear cupón `{bookingId, code}` | `{promotionId, promotionCode, promotionName, discountAmount, newTotal}` |
+| GET | `/loyalty/redemptions/{bookingId}` | Lo que debo hoy de esa reserva y el cupón aplicado (BIZ-02); la pantalla de pago lo pide al abrirse. Reserva ajena → 404 `BOOKING_NOT_FOUND` | `{bookingId, bookingTotal, appliedDiscounts, amountDue, redemption: {promotionId, promotionCode, promotionName, discountAmount} \| null}` |
 | DELETE | `/loyalty/redemptions/{bookingId}/{promotionId}` | Quitar el cupón (E-08): solo el dueño y sin pago en revisión ni aprobado (si no, 409). Una sola promoción por reserva (E-09, `PROMOTION_ONE_PER_BOOKING`) | `{bookingId, bookingTotal, appliedDiscounts, amountDue}` |
+
+En `POST /payments`, `POST /admin/payments` y `POST /loyalty/redeem`, `bookingId` y
+`paymentAccountId` son obligatorios: si faltan, 400 `VALIDATION_ERROR` (BIZ-13).
 
 **Admin (`ADMIN`)**
 
 | Método | Ruta | Qué hace | Respuesta |
 |--------|------|----------|-----------|
-| GET | `/admin/payments?status=` | Cola de pagos (máx. 200), filtro opcional por estado | `PaymentDto[]` |
-| GET | `/admin/payments/{id}` | Un pago | `PaymentDto` |
+| GET | `/admin/payments?status=` | Cola de pagos (máx. 200, con imagen), filtro opcional por estado | `PaymentDto[]` |
+| GET | `/admin/payments?status=&page=&size=` | La misma cola por páginas (E-10): page desde 0, size 1-100 (20 por defecto), sin la imagen del comprobante | `{items: PaymentDto[], page, size, totalElements, totalPages}` |
+| GET | `/admin/payments/{id}` | Un pago, con la imagen del comprobante | `PaymentDto` |
 | GET | `/admin/payments/amount-due?bookingId=` | Lo que se cobraría por esa reserva | `{bookingId, bookingTotal, appliedDiscounts, amountDue}` |
-| POST | `/admin/payments` | Pago en caja `{bookingId, paymentAccountId, transactionReference?}` | 201 `PaymentDto` (`APPROVED`) |
-| POST | `/admin/payments/{id}/approve` | Aprobar | `PaymentDto` |
+| POST | `/admin/payments` | Pago en caja `{bookingId, paymentAccountId, transactionReference?}`; acepta la cuenta de efectivo aunque esté desactivada (C-04) | 201 `PaymentDto` (`APPROVED`) |
+| POST | `/admin/payments/{id}/approve` | Aprobar; 409 `AMOUNT_CHANGED` si el monto del pago ya no es lo que se debe hoy (BIZ-01) | `PaymentDto` |
 | POST | `/admin/payments/{id}/reject` | Rechazar `{reason}` | `PaymentDto` |
 | POST | `/admin/payments/{id}/refund` | Reembolsar | 204 |
 | GET | `/admin/payment-accounts` | Todas las cuentas (incluidas inactivas) | `PaymentAccountDto[]` |
@@ -538,17 +549,22 @@ Todas las rutas empiezan con `/api/v1`.
   "transactionReference": "M18492048",
   "reportedAmount": 45000,
   "receiptImage": "data:image/png;base64,...",
+  "hasReceiptImage": true,
   "reportedAtUtc": "2026-10-08T15:30:00Z",
   "reportedBy": 3,
   "account": { "id": 2, "methodCode": "NEQUI", "methodName": "Nequi", "accountHolder": "...", "...": "..." },
-  "booking": { "id": 7, "code": "RES-7", "status": "CONFIRMED", "total": 50000, "...": "..." }
+  "booking": { "id": 7, "code": "RES-7", "status": "CONFIRMED", "total": 50000, "...": "..." },
+  "bookingCancelled": false
 }
 ```
 
 - `amount` = lo que se espera cobrar (calculado por el servidor).
 - `reportedAmount` = lo que el cliente dice haber pagado (`null` si no lo indicó). El admin compara
   ambos antes de aprobar.
-- `receiptImage` = `null` en pagos registrados en caja.
+- `receiptImage` = `null` en pagos registrados en caja y en la página de la cola del admin (E-10);
+  `hasReceiptImage` dice si hay imagen para pedirla con `GET /admin/payments/{id}`.
+- `bookingCancelled` = la reserva está cancelada hoy en booking-service (BIZ-07): con un pago
+  `APPROVED` el admin debe reembolsarlo; con uno `IN_REVIEW`, rechazarlo.
 
 ---
 
@@ -580,10 +596,11 @@ Admin ──POST /admin/payments/{id}/approve──►
   2. Guard: la reserva no tiene otro pago aprobado      (409 PAYMENT_ALREADY_APPROVED)
   3. booking = booking-service: admin/bookings/{id}     (sin reserva no se sabe a quién dar puntos)
   4. Guard: la reserva sigue pagable                    (409 BOOKING_NOT_PAYABLE si se canceló)
-  5. payment.Approve(admin, ahora)                      → evento PaymentApproved
-  6. LoyaltyRewardService.CreditForBooking               → movimiento EARNED (si aplica)
-  7. Commit  (pago + puntos en la misma transacción)
-  8. Publica payment.confirmed → notification-service avisa al cliente
+  5. Guard: el monto del pago es lo que se debe hoy     (409 AMOUNT_CHANGED si la reserva cambió, BIZ-01)
+  6. payment.Approve(admin, ahora)                      → evento PaymentApproved
+  7. LoyaltyRewardService.CreditForBooking               → movimiento EARNED (si aplica)
+  8. Commit  (pago + puntos en la misma transacción)
+  9. Publica payment.confirmed → notification-service avisa al cliente
 ```
 
 La acreditación es **idempotente**: si la reserva ya tiene sus puntos vigentes, no los vuelve a
@@ -607,7 +624,7 @@ la misma referencia, porque es la misma reserva).
 ```
   1. booking = booking-service: admin/bookings/{id}
   2. Guard: pagable y sin pago aprobado  (aquí SÍ se permite que haya uno en revisión)
-  3. Guard: cuenta activa (puede ser efectivo)
+  3. Guard: cuenta activa, o la de efectivo aunque esté desactivada (C-04)
   4. Guard: referencia no reutilizada (si se indicó)
   5. monto = AmountDueCalculator
   6. Payment.RegisterInPerson(...)                      → APPROVED directo, evento PaymentApproved
@@ -723,12 +740,19 @@ lo publica. El dominio no sabe que existe RabbitMQ.
    promoción que consumió un uso).
 3. **Restricciones de la base** — índices únicos que son la garantía final:
    - Un solo pago aprobado por reserva.
-   - Un cupón una vez por reserva.
+   - Un solo pago abierto (PENDING o IN_REVIEW) por reserva: un doble clic al reportar no deja dos
+     pagos en revisión (migración 023, A-16).
+   - Una referencia de transacción no respalda dos pagos vivos (pendiente, en revisión o aprobado):
+     vista indexada `payment.v_live_transaction_reference` (migración 023). Tras un rechazo se puede
+     volver a usar.
+   - Una sola promoción por reserva (migración 021, E-09).
    - Una posición del ledger por cliente: dos movimientos de puntos simultáneos no pueden dejar un
      saldo equivocado.
 
-Cualquier choque de las capas 2 y 3 llega al cliente como **409 `DATA_CONFLICT`** ("recarga e
-intenta de nuevo").
+Un choque con uno de los índices que protegen una regla llega con el 409 de esa regla
+(`PAYMENT_ALREADY_REPORTED`, `TRANSACTION_REFERENCE_REUSED`, `PAYMENT_ALREADY_APPROVED`,
+`PROMOTION_ONE_PER_BOOKING`), el mismo que da la validación de la capa 1. Cualquier otro choque de las
+capas 2 y 3 llega como **409 `DATA_CONFLICT`** ("recarga e intenta de nuevo").
 
 ---
 
@@ -747,8 +771,9 @@ El código HTTP se decide por el **tipo de excepción** (`GlobalExceptionHandler
 |-----------|------|--------------------|
 | `DomainException` | 400 | `INVALID_RECEIPT_FILE`, `INVALID_PAYMENT_STATUS_TRANSITION`, `PROMOTION_NOT_REDEEMABLE` |
 | `InvalidRequestException` | 400 | `INVALID_PAYMENT_ACCOUNT`, `INVALID_PAYMENT_METHOD` |
+| Modelo inválido (`[ApiController]`) | 400 | `VALIDATION_ERROR` (falta `bookingId` o `paymentAccountId`, JSON mal formado) |
 | `NotFoundException` | 404 | `PAYMENT_NOT_FOUND`, `BOOKING_NOT_FOUND`, `PROMOTION_NOT_FOUND` |
-| `ConflictException` | 409 | `PAYMENT_ALREADY_APPROVED`, `PAYMENT_ALREADY_REPORTED`, `BOOKING_NOT_PAYABLE`, `TRANSACTION_REFERENCE_REUSED`, `DATA_CONFLICT` |
+| `ConflictException` | 409 | `PAYMENT_ALREADY_APPROVED`, `PAYMENT_ALREADY_REPORTED`, `AMOUNT_CHANGED`, `BOOKING_NOT_PAYABLE`, `TRANSACTION_REFERENCE_REUSED`, `DATA_CONFLICT` |
 | `ServiceUnavailableException` | 503 | `BOOKING_SERVICE_UNAVAILABLE` |
 | `UnauthorizedAccessException` | 401 | `UNAUTHORIZED` |
 | Cualquier otra | 500 | sin detalles internos |
@@ -779,9 +804,10 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 
 | Proyecto | Qué prueba | Cuántas |
 |----------|------------|---------|
-| `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 97 |
-| `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 15 |
-| `PaymentService.Infrastructure.IntegrationTests` | Consultas EF, concurrencia real contra SQL Server (base aislada, puerto 1434) | 7 (se omiten sin `PAYMENT_INTEGRATION_DB`) |
+| `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 134 |
+| `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 52 |
+| `PaymentService.Api.UnitTests` | Sin levantar el servicio: 403 por rol en cada ruta de los 5 controladores (F-04), campos obligatorios de los requests y formato de los errores de validación | 34 |
+| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 5 + 11 (las 11 se omiten sin `PAYMENT_INTEGRATION_DB`) |
 | `scripts/e2e/payment_flow.py` | Flujo completo por el gateway con todos los servicios arriba | — |
 
 ```bash
@@ -816,8 +842,8 @@ Ambos pasan por el api-gateway. Los estados del backend se agrupan en la UI así
 | Tema | Situación | Impacto |
 |------|-----------|---------|
 | **Sin Outbox** | Si RabbitMQ falla después del commit, el evento se pierde (queda en el log). | El cliente podría no recibir el aviso. Solución: patrón Outbox. |
-| **Antifraude de referencia** | Es *check-then-act* sin índice único. | Dos reportes simultáneos con la misma referencia en reservas distintas podrían pasar. |
-| **Imágenes en la base** | Comprobantes y QR como base64 en `NVARCHAR(MAX)`. | Tablas grandes y listados pesados. Solución: almacenamiento de archivos. |
+| **Antifraude de referencia** | La validación revisa todas las reservas; la base garantiza la unicidad solo entre pagos vivos (vista indexada, 023). Si al migrar ya había una referencia repetida, la vista no se crea (queda en el log de Liquibase) y solo queda la validación. | Revisar el log de `payment-migrate` después de desplegar. |
+| **Imágenes en la base** | Comprobantes y QR como base64 en `NVARCHAR(MAX)`. La página de la cola del admin ya no las manda (E-10), pero el servicio todavía las lee de la base. | Tablas grandes. Solución: almacenamiento de archivos. |
 | **Restricciones de promociones** | `is_public`, `min_completed_booking`, por servicio o cliente: no modeladas. | Toda promoción se comporta como pública y sin restricciones. |
 | **Traducciones del frontend** | Los códigos de error de pagos aún no están en los JSON de idiomas; algunos textos nuevos están temporalmente en `payment-texts.ts` (web). | Algunos errores se ven como "error inesperado". |
 
