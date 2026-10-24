@@ -17,6 +17,16 @@ public class PaymentPolicyTests
         Assert.Equal(expected, PaymentPolicy.IsBookingPayable(status));
     }
 
+    [Theory]
+    [InlineData("CANCELLED", true)]
+    [InlineData("cancelled", true)]
+    [InlineData("NO_SHOW", false)]
+    [InlineData("COMPLETED", false)]
+    public void IsBookingCancelled_OnlyForACancelledBooking(string status, bool expected)
+    {
+        Assert.Equal(expected, PaymentPolicy.IsBookingCancelled(status));
+    }
+
     [Fact]
     public void CanReportPayment_WithoutPayments_DependsOnTheBookingStatus()
     {

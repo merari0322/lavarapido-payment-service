@@ -137,6 +137,41 @@ public class PaymentQueryServiceTests
         Assert.Equal(6, tooBig.Items.Count);
     }
 
+    // ------------------------------------------------------------ BIZ-07: reserva cancelada con pago
+
+    [Fact]
+    public async Task List_AnApprovedPaymentWhoseBookingWasCancelled_IsFlaggedForTheAdmin()
+    {
+        var approved = Reported(BookingId);
+        approved.Approve(1, FixedClock.Now);
+        AddPayment(approved);
+        AddBooking(8, "CONFIRMED");
+        AddPayment(Reported(8));
+        // el cliente canceló después de que el admin aprobó el pago
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Status = "CANCELLED" };
+
+        var page = await _service.ListPageAsync(null, 0, 20, default);
+        var list = await _service.ListAsync(null, default);
+
+        var cancelled = Assert.Single(page.Items, p => p.BookingCancelled);
+        Assert.Equal("APPROVED", cancelled.Status);
+        Assert.Equal(BookingId, cancelled.Booking!.Id);
+        Assert.Single(list, p => p.BookingCancelled);
+        Assert.True((await _service.GetAsync(cancelled.Id, default)).BookingCancelled);
+    }
+
+    [Fact]
+    public async Task List_WhenTheBookingIsNoLongerFound_IsNotFlaggedAsCancelled()
+    {
+        AddPayment(Reported(BookingId));
+        _bookings.Bookings.Clear();
+
+        var item = Assert.Single(await _service.ListAsync(null, default));
+
+        Assert.Null(item.Booking);
+        Assert.False(item.BookingCancelled);
+    }
+
     // ------------------------------------------------------------ estado de pago por reserva
 
     [Fact]
