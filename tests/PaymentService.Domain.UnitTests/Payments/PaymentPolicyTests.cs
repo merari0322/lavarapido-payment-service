@@ -61,4 +61,17 @@ public class PaymentPolicyTests
     {
         Assert.Equal(expected, PaymentPolicy.AmountDue(total, discounts));
     }
+
+    [Theory]
+    [InlineData("50000", "50000", true)]
+    [InlineData("36000.00", "36000", true)]
+    [InlineData("33333.333", "33333.33", true)]  // el pago se guarda en centavos
+    [InlineData("50000", "60000", false)]        // BIZ-01: la reserva se reprogramó con otros servicios
+    [InlineData("50000", "49999.99", false)]
+    public void AmountStillMatches_ComparesInCents(string paymentAmount, string amountDue, bool expected)
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        Assert.Equal(expected, PaymentPolicy.AmountStillMatches(decimal.Parse(paymentAmount, culture),
+            decimal.Parse(amountDue, culture)));
+    }
 }
