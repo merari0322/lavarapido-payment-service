@@ -23,6 +23,9 @@ internal sealed class PromotionRedemptionRepository : IPromotionRedemptionReposi
     public Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct) =>
         _db.PromotionRedemptions.AnyAsync(r => r.BookingId == bookingId && r.PromotionId != promotionId, ct);
 
+    public async Task<IReadOnlyList<PromotionRedemption>> ListForBookingAsync(long bookingId, CancellationToken ct) =>
+        await _db.PromotionRedemptions.Where(r => r.BookingId == bookingId).OrderBy(r => r.Id).ToListAsync(ct);
+
     public Task<int> CountAsync(int promotionId, CancellationToken ct) =>
         _db.PromotionRedemptions.CountAsync(r => r.PromotionId == promotionId, ct);
 

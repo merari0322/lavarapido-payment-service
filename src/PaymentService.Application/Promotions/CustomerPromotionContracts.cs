@@ -23,3 +23,23 @@ public sealed record RedeemPromotionResultDto(
     string PromotionName,
     decimal DiscountAmount,
     decimal NewTotal);
+
+/// <summary>
+/// Lo que el cliente debe pagar hoy de una reserva y el cupón que tiene aplicado (BIZ-02). La web y
+/// la app lo piden al abrir la pantalla de pago, así muestran el total del servidor aunque se
+/// recargue la página. Los cuatro primeros campos son los mismos de AmountDueDto; Redemption es
+/// null si la reserva no tiene cupón (con E-09 hay como máximo uno).
+/// </summary>
+public sealed record BookingRedemptionDto(
+    long BookingId,
+    decimal BookingTotal,
+    decimal AppliedDiscounts,
+    decimal AmountDue,
+    AppliedRedemptionDto? Redemption);
+
+/// <summary>El cupón aplicado a una reserva y cuánto descuenta.</summary>
+public sealed record AppliedRedemptionDto(
+    int PromotionId,
+    string PromotionCode,
+    string PromotionName,
+    decimal DiscountAmount);

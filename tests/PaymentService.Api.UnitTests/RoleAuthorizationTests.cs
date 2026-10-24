@@ -92,6 +92,7 @@ public sealed class RoleAuthorizationTests : IAsyncLifetime
     [InlineData("GET", "/api/v1/loyalty/balance")]
     [InlineData("GET", "/api/v1/loyalty/promotions")]
     [InlineData("POST", "/api/v1/loyalty/redeem")]
+    [InlineData("GET", "/api/v1/loyalty/redemptions/7")]
     [InlineData("DELETE", "/api/v1/loyalty/redemptions/7/1")]
     [InlineData("POST", "/api/v1/payments")]
     [InlineData("GET", "/api/v1/payments/me")]
