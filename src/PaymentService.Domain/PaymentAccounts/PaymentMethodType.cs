@@ -6,7 +6,9 @@ namespace PaymentService.Domain.PaymentAccounts;
 /// Medio de pago del catálogo (EFECTIVO, NEQUI, DAVIPLATA,
 /// TRANSFERENCIA). Es de solo lectura para este servicio: los medios vienen predefinidos.
 /// </summary>
-public sealed class PaymentMethodType : Entity<short>
+// S3453 (solo constructores privados) es un falso positivo: las filas las siembra la migración 015 y
+// EF Core las materializa con el constructor privado; a propósito ningún código puede crear un medio.
+public sealed class PaymentMethodType : Entity<short> // NOSONAR
 {
     private PaymentMethodType() { }
 
