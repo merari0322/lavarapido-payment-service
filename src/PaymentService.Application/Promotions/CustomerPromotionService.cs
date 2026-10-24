@@ -92,16 +92,17 @@ public sealed class CustomerPromotionService : ICustomerPromotionUseCases
     {
         // booking-service solo le devuelve al cliente sus propias reservas: ajena o inexistente → 404
         var booking = await _bookings.RequireForCustomerAsync(bookingId, ct);
-        var due = await _amountDue.BreakdownAsync(booking, ct);
+        var (due, discounts) = await _amountDue.DetailAsync(booking, ct);
 
         // Con E-09 hay a lo sumo un canje; si quedaron datos de antes con dos, se muestra el último.
-        var redemption = (await _redemptions.ListForBookingAsync(booking.Id, ct)).LastOrDefault();
+        // Su monto es lo que descuenta hoy (BIZ-05), el mismo que entra en AmountDue.
+        var last = discounts.LastOrDefault();
         AppliedRedemptionDto? applied = null;
-        if (redemption is not null)
+        if (last is not null)
         {
-            var promotion = await _promotions.GetIncludingDeletedAsync(redemption.PromotionId, ct);
-            applied = new AppliedRedemptionDto(redemption.PromotionId, promotion?.Code ?? string.Empty,
-                promotion?.Name ?? string.Empty, redemption.AppliedAmount);
+            var promotion = await _promotions.GetIncludingDeletedAsync(last.Redemption.PromotionId, ct);
+            applied = new AppliedRedemptionDto(last.Redemption.PromotionId, promotion?.Code ?? string.Empty,
+                promotion?.Name ?? string.Empty, last.Amount);
         }
         return new BookingRedemptionDto(due.BookingId, due.BookingTotal, due.AppliedDiscounts, due.AmountDue, applied);
     }

@@ -156,6 +156,21 @@ public class CustomerPromotionServiceTests
     }
 
     [Fact]
+    public async Task GetRedemption_WhenTheBookingTotalChanged_RecalculatesThePercentageCoupon()
+    {
+        // BIZ-05: el 10 % sigue siendo el 10 % del total de hoy, no los 4.000 del día del canje
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Total = 20_000m };
+
+        var result = await _service.GetRedemptionAsync(BookingId, Customer, default);
+
+        Assert.Equal(20_000m, result.BookingTotal);
+        Assert.Equal(2_000m, result.AppliedDiscounts);
+        Assert.Equal(18_000m, result.AmountDue);
+        Assert.Equal(2_000m, result.Redemption!.DiscountAmount);
+    }
+
+    [Fact]
     public async Task GetRedemption_AfterRemovingTheCoupon_HasNoRedemption()
     {
         await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);

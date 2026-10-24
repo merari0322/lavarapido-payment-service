@@ -99,6 +99,23 @@ public class PaymentCommandServiceTests
     }
 
     [Fact]
+    public async Task Report_AfterTheBookingWasRescheduled_ChargesThePercentageCouponOnTheNewTotal()
+    {
+        // BIZ-05: 50 % canjeado sobre 50.000 y la reserva baja a 20.000 → se cobran 10.000, no 0
+        var today = DateOnly.FromDateTime(FixedClock.Now);
+        var half = Promotion.Create(new PromotionDefinition("MITAD", "Mitad", null, null, null, null, false,
+            Array.Empty<string>(), today.AddDays(-1), today.AddDays(30), DiscountType.Percentage, 50m, 0));
+        _redemptions.Saved.Add(half.Redeem(new RedemptionRequest(BookingId, "RES-7", CustomerId, FixedClock.Now, 0,
+            50_000m, false, 0, 0)));
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Total = 20_000m };
+
+        var dto = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, null, "data:image/png;base64,AAA"),
+            Customer, default);
+
+        Assert.Equal(10_000m, dto.Amount);
+    }
+
+    [Fact]
     public async Task Report_ToAnInactiveAccount_IsAnInvalidRequest()
     {
         var error = await Assert.ThrowsAsync<InvalidRequestException>(() =>

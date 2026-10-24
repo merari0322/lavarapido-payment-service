@@ -150,6 +150,26 @@ public sealed class PersistenceTests
         Assert.Equal(1, await Get<IPromotionRedemptionRepository>(check).CountAsync(a.Id, default));
     }
 
+    [IntegrationFact]
+    public async Task Redemption_KeepsItsPercentageAndIsListedForItsBooking()
+    {
+        // BIZ-05 (migración 022): el porcentaje se guarda para recalcular si cambia el total
+        var code = await SavePromotionAsync();
+        var bookingId = DatabaseFixture.NewId();
+        await using (var scope = _db.NewRequest())
+        {
+            var promotion = (await Get<IPromotionRepository>(scope).GetByCodeAsync(code, default))!;
+            Get<IPromotionRedemptionRepository>(scope).Add(promotion.Redeem(Request(bookingId)));
+            await Get<IUnitOfWork>(scope).CommitAsync(default);
+        }
+
+        await using var check = _db.NewRequest();
+        var redemption = Assert.Single(await Get<IPromotionRedemptionRepository>(check).ListForBookingAsync(bookingId, default));
+        Assert.Equal(4_000m, redemption.AppliedAmount);
+        Assert.Equal(10m, redemption.DiscountPercent);
+        Assert.Equal(2_000m, redemption.DiscountOn(20_000m));
+    }
+
     private static RedemptionRequest Request(long bookingId) =>
         new(bookingId, "RES", DatabaseFixture.NewId(), Now, 0, 40_000m, false, 0, 0);
 

@@ -73,6 +73,9 @@ internal sealed class PromotionRedemptionConfiguration : IEntityTypeConfiguratio
         builder.Property(r => r.BookingId).HasColumnName("booking_id");
         builder.Property(r => r.PromotionId).HasColumnName("promotion_id");
         builder.Property(r => r.AppliedAmount).HasColumnName("applied_amount").HasPrecision(12, 2);
+        // Migración 022 (BIZ-05): porcentaje y tope del cupón porcentual, para recalcular el descuento.
+        builder.Property(r => r.DiscountPercent).HasColumnName("discount_percent").HasPrecision(5, 2);
+        builder.Property(r => r.MaxDiscountAmount).HasColumnName("max_discount_amount").HasPrecision(12, 2);
         builder.Property(r => r.RedeemedBy).HasColumnName("created_by");
         builder.Property(r => r.RedeemedAtUtc).HasColumnName("created_at");
         builder.HasAuditColumns();

@@ -130,11 +130,17 @@ public sealed class Promotion : AggregateRoot<int>
     /// Un cupón nunca deja la reserva en 0: el pago exige un monto mayor que cero (E-07). El tope
     /// también cubre un FIXED mayor que el total y las promociones de 100 % guardadas antes de la regla.
     /// </summary>
-    public decimal CalculateDiscount(decimal subtotal)
+    public decimal CalculateDiscount(decimal subtotal) =>
+        ApplyCaps(DiscountStrategyFactory.For(DiscountType).Calculate(subtotal, DiscountValue), subtotal, MaxDiscountAmount);
+
+    /// <summary>
+    /// Los topes de todo descuento: el tope en pesos (si hay) y dejar siempre MinAmountDue por pagar,
+    /// redondeado a centavos. Lo comparten el canje y el recálculo de un canje ya hecho (BIZ-05).
+    /// </summary>
+    internal static decimal ApplyCaps(decimal discount, decimal subtotal, decimal? maxDiscountAmount)
     {
         if (subtotal <= MinAmountDue) return 0m;
-        var discount = DiscountStrategyFactory.For(DiscountType).Calculate(subtotal, DiscountValue);
-        if (MaxDiscountAmount is { } cap) discount = Math.Min(discount, cap);
+        if (maxDiscountAmount is { } cap) discount = Math.Min(discount, cap);
         discount = Math.Min(discount, subtotal - MinAmountDue);
         return Math.Round(discount, 2, MidpointRounding.AwayFromZero);
     }
@@ -163,8 +169,11 @@ public sealed class Promotion : AggregateRoot<int>
         Guard.Against(MaxRedemptionsPerCustomer is { } perCustomer && request.CustomerRedemptions >= perCustomer,
             DomainErrorCodes.PromotionCustomerLimitReached, "Ya usaste este cupón el máximo de veces permitido.");
 
+        // Un cupón porcentual guarda su porcentaje (y su tope) para recalcularse si cambia el total (BIZ-05).
+        var isPercentage = DiscountType == DiscountType.Percentage;
         var redemption = PromotionRedemption.Create(request.BookingId, Id, CalculateDiscount(request.Subtotal),
-            request.CustomerUserId, request.NowUtc);
+            request.CustomerUserId, request.NowUtc, isPercentage ? DiscountValue : null,
+            isPercentage ? MaxDiscountAmount : null);
         AddDomainEvent(new PromotionRedeemed(Id, Code, Name, request.BookingId, request.BookingCode,
             request.CustomerUserId, redemption.AppliedAmount, request.NowUtc));
         return redemption;

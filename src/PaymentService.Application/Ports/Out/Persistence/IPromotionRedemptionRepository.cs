@@ -22,9 +22,6 @@ public interface IPromotionRedemptionRepository
     /// <summary>Cuántas veces la canjeó ese cliente (por created_by, ver PromotionRedemption.RedeemedBy).</summary>
     Task<int> CountByCustomerAsync(int promotionId, long customerUserId, CancellationToken ct);
 
-    /// <summary>Suma de lo ya descontado por cupones en esa reserva.</summary>
-    Task<decimal> AppliedDiscountTotalAsync(long bookingId, CancellationToken ct);
-
     /// <summary>Usos y ahorro total por promoción, para el listado y las métricas del admin.</summary>
     Task<IReadOnlyDictionary<int, RedemptionStats>> StatsByPromotionAsync(CancellationToken ct);
 
