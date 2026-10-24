@@ -1,0 +1,145 @@
+using PaymentService.Application.Common;
+using PaymentService.Application.Common.Exceptions;
+using PaymentService.Application.Ports.In;
+using PaymentService.Application.Ports.Out.Integration;
+using PaymentService.Application.Ports.Out.Persistence;
+using PaymentService.Domain.Payments;
+
+namespace PaymentService.Application.Payments;
+
+/// <summary>
+/// Consultas de pagos. La visibilidad la decide booking-service con la identidad del request: el
+/// cliente solo recibe sus reservas, así que solo ve los pagos de esas reservas.
+/// </summary>
+public sealed class PaymentQueryService : IPaymentQueryUseCases
+{
+    // Tope de la cola del admin sin paginar: los más recientes primero.
+    private const int AdminListLimit = 200;
+
+    // Página de la cola del admin (E-10): la misma convención que los listados de security-service.
+    public const int DefaultPageSize = 20;
+    public const int MaxPageSize = 100;
+
+    private readonly IPaymentRepository _payments;
+    private readonly IBookingDirectory _bookings;
+    private readonly PaymentDtoAssembler _dtos;
+    private readonly AmountDueCalculator _amountDue;
+
+    public PaymentQueryService(IPaymentRepository payments, IBookingDirectory bookings, PaymentDtoAssembler dtos,
+        AmountDueCalculator amountDue)
+    {
+        _payments = payments;
+        _bookings = bookings;
+        _dtos = dtos;
+        _amountDue = amountDue;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PaymentDto>> MineAsync(PaymentHistoryFilter filter, CancellationToken ct)
+    {
+        if (filter.From is { } from && filter.To is { } to && from > to)
+            throw new InvalidRequestException(ErrorCodes.InvalidDateRange, "La fecha inicial no puede ser posterior a la final.");
+
+        var service = filter.Service?.Trim();
+        var bookings = (await _bookings.MineAsync(ct))
+            .Where(b => InRange(b, filter.From, filter.To))
+            .Where(b => string.IsNullOrEmpty(service) || b.Services.Contains(service, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(b => b.Id);
+        if (bookings.Count == 0) return Array.Empty<PaymentDto>();
+
+        // de la reserva más reciente a la más antigua; dentro de una reserva, el pago más nuevo primero
+        var payments = (await _payments.ListForBookingsAsync(bookings.Keys, ct))
+            .OrderByDescending(p => bookings[p.BookingId].Date, StringComparer.Ordinal)
+            .ThenByDescending(p => bookings[p.BookingId].StartTime, StringComparer.Ordinal)
+            .ThenByDescending(p => p.Id)
+            .ToList();
+        return await _dtos.ToDtosAsync(payments, bookings, ct);
+    }
+
+    // la fecha de la reserva viene como yyyy-MM-dd; si no se entiende, no se filtra por ella
+    private static bool InRange(BookingInfo booking, DateOnly? from, DateOnly? to)
+    {
+        if (from is null && to is null) return true;
+        if (!DateOnly.TryParseExact(booking.Date, "yyyy-MM-dd", out var date)) return false;
+        return (from is null || date >= from) && (to is null || date <= to);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BookingPaymentStateDto>> MyBookingsAsync(CancellationToken ct)
+    {
+        var bookings = await _bookings.MineAsync(ct);
+        if (bookings.Count == 0) return Array.Empty<BookingPaymentStateDto>();
+
+        var payments = (await _payments.ListForBookingsAsync(bookings.Select(b => b.Id).ToList(), ct))
+            .ToLookup(p => p.BookingId);
+        return bookings
+            .Select(booking =>
+            {
+                var ofBooking = payments[booking.Id].ToList();
+                var latest = ofBooking.MaxBy(p => p.Id);
+                return new BookingPaymentStateDto(booking.Id, latest?.Status.ToCode(),
+                    PaymentPolicy.CanReportPayment(booking.Status, ofBooking.Select(p => p.Status)));
+            })
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<PaymentDto> GetMineAsync(long paymentId, CancellationToken ct)
+    {
+        var payment = await _payments.GetRequiredAsync(paymentId, ct);
+        // Si la reserva no es suya, booking-service no la devuelve: se responde 404 igual que si
+        // el pago no existiera, para no revelar pagos ajenos.
+        var booking = await _bookings.GetForCustomerAsync(payment.BookingId, ct)
+            ?? throw new NotFoundException(ErrorCodes.PaymentNotFound, $"No existe el pago {paymentId}.");
+        return await _dtos.ToDtoAsync(payment, booking, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PaymentDto>> ListAsync(string? status, CancellationToken ct)
+    {
+        var payments = await _payments.ListAsync(ParseStatus(status), 0, AdminListLimit, ct);
+        return await _dtos.ToDtosAsync(payments, await AdminBookingsAsync(payments, ct), ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<PageDto<PaymentDto>> ListPageAsync(string? status, int page, int size, CancellationToken ct)
+    {
+        var filter = ParseStatus(status);
+        var pageIndex = Math.Max(page, 0);
+        var pageSize = Math.Clamp(size, 1, MaxPageSize);
+
+        // Las consultas van una por una: la persistencia no admite operaciones en paralelo.
+        var total = await _payments.CountAsync(filter, ct);
+        var payments = await _payments.ListAsync(filter, pageIndex * pageSize, pageSize, ct);
+        var items = await _dtos.ToDtosAsync(payments, await AdminBookingsAsync(payments, ct), ct,
+            includeReceiptImage: false);
+        return PageDto<PaymentDto>.Of(items, pageIndex, pageSize, total);
+    }
+
+    private static PaymentStatus? ParseStatus(string? status) =>
+        string.IsNullOrWhiteSpace(status) ? null : PaymentStatusCodes.Parse(status);
+
+    // Las reservas se piden en paralelo (son llamadas HTTP independientes a booking-service).
+    private async Task<IReadOnlyDictionary<long, BookingInfo>> AdminBookingsAsync(IEnumerable<Payment> payments,
+        CancellationToken ct)
+    {
+        var lookups = payments.Select(p => p.BookingId).Distinct()
+            .Select(id => _bookings.GetForAdminAsync(id, ct));
+        return (await Task.WhenAll(lookups)).OfType<BookingInfo>().ToDictionary(b => b.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<PaymentDto> GetAsync(long paymentId, CancellationToken ct)
+    {
+        var payment = await _payments.GetRequiredAsync(paymentId, ct);
+        var booking = await _bookings.GetForAdminAsync(payment.BookingId, ct);
+        return await _dtos.ToDtoAsync(payment, booking, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<AmountDueDto> AmountDueAsync(long bookingId, CancellationToken ct)
+    {
+        var booking = await _bookings.RequireForAdminAsync(bookingId, ct);
+        return await _amountDue.BreakdownAsync(booking, ct);
+    }
+}

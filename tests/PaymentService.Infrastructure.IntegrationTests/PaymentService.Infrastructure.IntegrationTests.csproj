@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Pruebas contra un SQL Server real (EF Core, concurrencia, migraciones). Son opcionales: solo
+    corren si existe la variable PAYMENT_INTEGRATION_DB con la cadena de conexión; si no, se
+    marcan como omitidas. Ver README, sección "Pruebas de integración".
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="coverlet.collector" Version="6.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PaymentService.Infrastructure\PaymentService.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

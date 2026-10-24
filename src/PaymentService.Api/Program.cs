@@ -1,20 +1,61 @@
-using PaymentService.Api;
-using PaymentService.Application.Payments;
+using System.Globalization;
+using System.Net;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using PaymentService.Api.Configuration;
+using PaymentService.Api.Errors;
+using PaymentService.Application;
+using PaymentService.Api.Http;
 using PaymentService.Infrastructure;
+using PaymentService.Infrastructure.Booking;
+
+// Composition root: el único lugar donde se juntan todas las capas. Api conoce a Application (los
+// casos de uso) y a Infrastructure (los adaptadores) solo para conectarlos aquí; el dominio y los
+// casos de uso nunca dependen de la API ni de la infraestructura.
+
+// Igual que los servicios Java: los valores salen de lavarapido-infra/.env (o de variables de
+// entorno, que mandan). Así no hay contraseñas ni puertos quemados en appsettings.
+EnvFile.Load();
 
 var builder = WebApplication.CreateBuilder(args);
+var config = builder.Configuration;
 
-builder.Services.AddControllers();
+config.EnsurePaymentConnectionString();
+
+builder.Services.Configure<KestrelServerOptions>(o =>
+{
+    // Escucha en todas las interfaces del contenedor, en PAYMENT_PORT (3005). Va sin TLS a propósito,
+    // como los servicios Java: solo lo alcanza la red interna de Docker y el HTTPS lo termina el
+    // proxy de entrada antes del api-gateway (S5332).
+    o.Listen(IPAddress.Any, int.Parse(config["PAYMENT_PORT"] ?? "3005", CultureInfo.InvariantCulture));
+    // El comprobante y el QR viajan como imagen (data URL) en el cuerpo.
+    o.Limits.MaxRequestBodySize = 8 * 1024 * 1024;
+});
+
+builder.Services.AddJwtAuthentication(config);
+builder.Services.AddConfiguredCors(config);
+builder.Services.AddControllers().AddValidationErrorCode();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
-builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddScoped<PaymentApplicationService>();
+// Casos de uso (puertos de entrada) y adaptadores (puertos de salida).
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(config);
+
+// Recursos del host que las capas internas usan pero no deciden: el reloj y la identidad del
+// request en curso (Infrastructure la reenvía a booking-service).
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IAccessTokenProvider, HttpContextAccessTokenProvider>();
+builder.Services.AddSingleton<IRequestCorrelation, HttpContextRequestCorrelation>();
 
 var app = builder.Build();
 
+// IDs reales de los catálogos (tipos de descuento y de movimiento de puntos), leídos por código.
+await app.Services.InitializeInfrastructureAsync();
+
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -23,7 +64,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapHealthEndpoints();
 
 app.Run();

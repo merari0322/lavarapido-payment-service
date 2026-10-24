@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Application solo conoce al dominio; habla con el exterior a través de sus puertos (Ports/Out). -->
   <ItemGroup>
     <ProjectReference Include="..\PaymentService.Domain\PaymentService.Domain.csproj" />
+  </ItemGroup>
+
+  <!-- Solo las abstracciones de DI, para que la capa registre sus propios casos de uso (AddApplication). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
   </ItemGroup>
 </Project>

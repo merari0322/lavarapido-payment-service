@@ -5,7 +5,7 @@ services:
     container_name: pay-sqlserver
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-Lavado_Dev_2026!}"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env (ver .env.example)}"
     ports:
       - "${MSSQL_PORT:-1434}:1433"
     volumes:
@@ -29,7 +29,7 @@ services:
       - -U
       - sa
       - -P
-      - "${MSSQL_SA_PASSWORD:-Lavado_Dev_2026!}"
+      - "${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env (ver .env.example)}"
       - -Q
       - "IF DB_ID('lavado_vehicular') IS NULL CREATE DATABASE lavado_vehicular"
 
@@ -45,7 +45,7 @@ services:
       - --changelog-file=db/changelog/db.changelog-master.yaml
       - --url=jdbc:sqlserver://sqlserver:1433;databaseName=lavado_vehicular;encrypt=true;trustServerCertificate=true
       - --username=sa
-      - --password=${MSSQL_SA_PASSWORD:-Lavado_Dev_2026!}
+      - --password=${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env (ver .env.example)}
       - --database-change-log-table-name=DATABASECHANGELOG_PAYMENT
       - --database-change-log-lock-table-name=DATABASECHANGELOGLOCK_PAYMENT
       - update

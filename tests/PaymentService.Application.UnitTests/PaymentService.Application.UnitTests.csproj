@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Mismas versiones flotantes que PaymentService.Domain.UnitTests. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="coverlet.collector" Version="6.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Solo Application (y Domain por transitividad): los puertos de salida se prueban con dobles en memoria. -->
+    <ProjectReference Include="..\..\src\PaymentService.Application\PaymentService.Application.csproj" />
+  </ItemGroup>
+</Project>
