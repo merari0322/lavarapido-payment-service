@@ -121,6 +121,74 @@ public class CustomerPromotionServiceTests
         Assert.Equal(ErrorCodes.PromotionRedemptionNotFound, error.Code);
     }
 
+    // ---- BIZ-02: lo que el cliente debe pagar, consultado al abrir la pantalla de pago ----
+
+    [Fact]
+    public async Task GetRedemption_WithoutACoupon_ReturnsTheFullTotalAndNoRedemption()
+    {
+        var result = await _service.GetRedemptionAsync(BookingId, Customer, default);
+
+        Assert.Equal(BookingId, result.BookingId);
+        Assert.Equal(40_000m, result.BookingTotal);
+        Assert.Equal(0m, result.AppliedDiscounts);
+        Assert.Equal(40_000m, result.AmountDue);
+        Assert.Null(result.Redemption);
+    }
+
+    [Fact]
+    public async Task GetRedemption_AfterRedeeming_ShowsTheCouponAndTheSameAmountTheServerWillCharge()
+    {
+        // al recargar la página el cliente sigue viendo su cupón y el total con descuento
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+
+        var result = await _service.GetRedemptionAsync(BookingId, Customer, default);
+
+        Assert.Equal(40_000m, result.BookingTotal);
+        Assert.Equal(4_000m, result.AppliedDiscounts);
+        Assert.Equal(36_000m, result.AmountDue);
+        Assert.Equal(await new AmountDueCalculator(_redemptions).ForAsync(_bookings.Bookings[BookingId], default),
+            result.AmountDue);
+        var redemption = Assert.IsType<AppliedRedemptionDto>(result.Redemption);
+        Assert.Equal(1, redemption.PromotionId);
+        Assert.Equal("VERANO10", redemption.PromotionCode);
+        Assert.Equal("Verano", redemption.PromotionName);
+        Assert.Equal(4_000m, redemption.DiscountAmount);
+    }
+
+    [Fact]
+    public async Task GetRedemption_AfterRemovingTheCoupon_HasNoRedemption()
+    {
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+        await _service.CancelRedemptionAsync(BookingId, 1, Customer, default);
+
+        var result = await _service.GetRedemptionAsync(BookingId, Customer, default);
+
+        Assert.Null(result.Redemption);
+        Assert.Equal(40_000m, result.AmountDue);
+    }
+
+    [Fact]
+    public async Task GetRedemption_WhenThePromotionWasDeletedAfterwards_StillShowsItsCodeAndName()
+    {
+        await _service.RedeemAsync(new RedeemPromotionCommand(BookingId, "VERANO10"), Customer, default);
+        _promotions.Remove(_promotions.Promotions[0], 9);
+
+        var result = await _service.GetRedemptionAsync(BookingId, Customer, default);
+
+        Assert.Equal("VERANO10", result.Redemption!.PromotionCode);
+        Assert.Equal(36_000m, result.AmountDue);
+    }
+
+    [Fact]
+    public async Task GetRedemption_OfABookingThatIsNotTheCustomers_IsNotFound()
+    {
+        // booking-service no le devuelve al cliente reservas ajenas: igual que el DELETE, 404
+        var error = await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.GetRedemptionAsync(99, Customer, default));
+
+        Assert.Equal(ErrorCodes.BookingNotFound, error.Code);
+    }
+
     [Fact]
     public async Task Redeem_UnknownCode_IsNotFound()
     {

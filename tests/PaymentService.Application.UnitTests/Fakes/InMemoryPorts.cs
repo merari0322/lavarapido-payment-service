@@ -124,6 +124,12 @@ internal sealed class FakePromotionRepository : IPromotionRepository
     public Task<IReadOnlyList<Promotion>> ListAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Promotion>>(Promotions);
     public Task<Promotion?> GetByIdAsync(int id, CancellationToken ct) => Task.FromResult(Promotions.FirstOrDefault(p => p.Id == id));
 
+    // las borradas siguen existiendo (borrado lógico), solo que las demás consultas no las ven
+    public List<Promotion> Deleted { get; } = new();
+
+    public Task<Promotion?> GetIncludingDeletedAsync(int id, CancellationToken ct) =>
+        Task.FromResult(Promotions.Concat(Deleted).FirstOrDefault(p => p.Id == id));
+
     public Task<Promotion?> GetByCodeAsync(string code, CancellationToken ct) =>
         Task.FromResult(Promotions.FirstOrDefault(p => p.Code == code.Trim().ToUpperInvariant()));
 
@@ -131,7 +137,12 @@ internal sealed class FakePromotionRepository : IPromotionRepository
         Task.FromResult(Promotions.Any(p => p.Code == code.Trim().ToUpperInvariant() && p.Id != exceptId));
 
     public void Add(Promotion promotion) => Promotions.Add(promotion);
-    public void Remove(Promotion promotion, long deletedBy) => Promotions.Remove(promotion);
+
+    public void Remove(Promotion promotion, long deletedBy)
+    {
+        Promotions.Remove(promotion);
+        Deleted.Add(promotion);
+    }
 }
 
 internal sealed class FakeRedemptionRepository : IPromotionRedemptionRepository
@@ -149,6 +160,9 @@ internal sealed class FakeRedemptionRepository : IPromotionRedemptionRepository
 
     public Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct) =>
         Task.FromResult(Saved.Any(r => r.BookingId == bookingId && r.PromotionId != promotionId));
+
+    public Task<IReadOnlyList<PromotionRedemption>> ListForBookingAsync(long bookingId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<PromotionRedemption>>(Saved.Where(r => r.BookingId == bookingId).ToList());
 
     public Task<int> CountAsync(int promotionId, CancellationToken ct) => Task.FromResult(Saved.Count(r => r.PromotionId == promotionId));
 

@@ -43,6 +43,15 @@ public sealed class LoyaltyController : ControllerBase
         _promotions.RedeemAsync(new RedeemPromotionCommand(request.BookingId, request.Code), HttpContext.GetCaller(), ct);
 
     /// <summary>
+    /// Lo que falta por pagar de una reserva propia y el cupón aplicado (null si no tiene), BIZ-02:
+    /// la pantalla de pago lo pide al abrirse para no calcular el total por su cuenta. Reserva ajena
+    /// o inexistente → 404 BOOKING_NOT_FOUND.
+    /// </summary>
+    [HttpGet("redemptions/{bookingId:long}")]
+    public Task<BookingRedemptionDto> Redemption(long bookingId, CancellationToken ct) =>
+        _promotions.GetRedemptionAsync(bookingId, HttpContext.GetCaller(), ct);
+
+    /// <summary>
     /// "Quitar cupón" (E-08): anula el canje en una reserva propia sin pago en revisión ni aprobado
     /// (si no, 409) y devuelve lo que ahora falta por pagar.
     /// </summary>

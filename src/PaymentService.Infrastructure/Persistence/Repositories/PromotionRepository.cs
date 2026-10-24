@@ -23,6 +23,10 @@ internal sealed class PromotionRepository : IPromotionRepository
     public Task<Promotion?> GetByIdAsync(int id, CancellationToken ct) =>
         _db.Promotions.FirstOrDefaultAsync(p => p.Id == id, ct);
 
+    // Sin el filtro global de borrado lógico (AuditColumns): la promoción de un canje ya hecho.
+    public Task<Promotion?> GetIncludingDeletedAsync(int id, CancellationToken ct) =>
+        _db.Promotions.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == id, ct);
+
     public Task<Promotion?> GetByCodeAsync(string code, CancellationToken ct)
     {
         var normalized = Normalize(code);

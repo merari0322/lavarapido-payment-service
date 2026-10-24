@@ -9,6 +9,12 @@ public interface IPromotionRepository
 
     Task<Promotion?> GetByIdAsync(int id, CancellationToken ct);
 
+    /// <summary>
+    /// La promoción aunque esté borrada: un canje que ya se hizo sigue apuntando a ella y hay que
+    /// poder mostrar su código y su nombre.
+    /// </summary>
+    Task<Promotion?> GetIncludingDeletedAsync(int id, CancellationToken ct);
+
     /// <summary>Busca por código sin distinguir mayúsculas (los códigos se guardan en mayúscula).</summary>
     Task<Promotion?> GetByCodeAsync(string code, CancellationToken ct);
 

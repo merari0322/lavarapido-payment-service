@@ -13,6 +13,9 @@ public interface IPromotionRedemptionRepository
     /// <summary>Si la reserva ya tiene canjeada alguna promoción distinta de esa (E-09).</summary>
     Task<bool> HasOtherOnBookingAsync(long bookingId, int promotionId, CancellationToken ct);
 
+    /// <summary>Los canjes de esa reserva, del más antiguo al más reciente (con E-09, a lo sumo uno).</summary>
+    Task<IReadOnlyList<PromotionRedemption>> ListForBookingAsync(long bookingId, CancellationToken ct);
+
     /// <summary>Cuántas veces se ha canjeado la promoción en total.</summary>
     Task<int> CountAsync(int promotionId, CancellationToken ct);
 
