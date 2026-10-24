@@ -31,5 +31,5 @@ internal static class PromotionMapper
 
     public static PromotionForCustomerDto ToCustomerDto(this Promotion p, int customerPoints) =>
         new(p.Id, p.Code, p.Name, p.Description, p.Icon, p.Featured, p.Benefits, p.DiscountPercent,
-            p.RequiredPoints, p.IsUnlockedFor(customerPoints));
+            p.RequiredPoints, p.IsUnlockedFor(customerPoints), p.DiscountType.ToCode(), p.DiscountValue);
 }
