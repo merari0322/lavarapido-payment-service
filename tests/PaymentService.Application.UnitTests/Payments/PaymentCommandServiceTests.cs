@@ -108,6 +108,49 @@ public class PaymentCommandServiceTests
         Assert.Empty(_payments.Saved);
     }
 
+    // ---- C-04: el efectivo desactivado solo se oculta a los clientes ----
+
+    private void InactiveCashAccount()
+    {
+        var cash = Ids.Create<PaymentMethodType>(("Code", "EFECTIVO"), ("Name", "Efectivo"), ("RequiresReceipt", false),
+            ("IsActive", true)).WithId<PaymentMethodType, short>(1);
+        _accounts.Methods.Add(cash);
+        _accounts.Accounts.Add(PaymentAccount.Create(cash, "Caja", null, null, null, active: false)
+            .WithId<PaymentAccount, short>(3));
+    }
+
+    [Fact]
+    public async Task RegisterInPerson_WithTheCashAccountDeactivated_IsStillAllowedForTheAdmin()
+    {
+        InactiveCashAccount();
+
+        var dto = await _service.RegisterInPersonAsync(new RegisterInPersonPaymentCommand(BookingId, 3, null), Admin, default);
+
+        Assert.Equal("APPROVED", dto.Status);
+        Assert.Equal(50_000m, dto.Amount);
+    }
+
+    [Fact]
+    public async Task RegisterInPerson_ToAnotherInactiveAccount_IsStillAnInvalidRequest()
+    {
+        var error = await Assert.ThrowsAsync<InvalidRequestException>(() =>
+            _service.RegisterInPersonAsync(new RegisterInPersonPaymentCommand(BookingId, 2, null), Admin, default));
+
+        Assert.Equal(ErrorCodes.InvalidPaymentAccount, error.Code);
+        Assert.Empty(_payments.Saved);
+    }
+
+    [Fact]
+    public async Task Report_WithTheCashAccount_IsAnInvalidRequestForTheCustomerActiveOrNot()
+    {
+        InactiveCashAccount();
+
+        var error = await Assert.ThrowsAsync<InvalidRequestException>(() =>
+            _service.ReportAsync(new ReportPaymentCommand(BookingId, 3, null, "data:image/png;base64,AAA"), Customer, default));
+
+        Assert.Equal(ErrorCodes.InvalidPaymentAccount, error.Code);
+    }
+
     // ---- Aprobar ----
 
     [Fact]
