@@ -6,6 +6,13 @@ namespace PaymentService.Domain.Payments;
 // tiene Id cuando ocurre el evento (se asigna al guardarlo); quien los publica los lee junto con el
 // aggregate ya guardado (ver PaymentIntegrationEvents en Application).
 
+/// <summary>
+/// El cliente reportó el pago con su comprobante y quedó en revisión (también cuando lo vuelve a
+/// reportar tras un rechazo: es un pago nuevo). Para booking-service la reserva ya no vence por falta de pago.
+/// </summary>
+public sealed record PaymentReported(long BookingId, decimal Amount, DateTime OccurredOnUtc)
+    : DomainEvent(OccurredOnUtc);
+
 /// <summary>El pago quedó aprobado: la reserva está pagada.</summary>
 public sealed record PaymentApproved(long BookingId, decimal Amount, DateTime OccurredOnUtc)
     : DomainEvent(OccurredOnUtc);

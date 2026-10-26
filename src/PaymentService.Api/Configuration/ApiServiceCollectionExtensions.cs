@@ -1,5 +1,7 @@
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using PaymentService.Api.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using PaymentService.Application.Common;
@@ -50,7 +52,10 @@ internal static class ApiServiceCollectionExtensions
                     NameClaimType = "sub",
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
-            });
+            })
+            // llave entre servicios para /internal/** (INTERNAL_API_KEY en X-Internal-Key, ADR-011 sección 8)
+            .AddScheme<AuthenticationSchemeOptions, InternalApiKeyAuthenticationHandler>(
+                InternalApiKeyAuthenticationHandler.Scheme, null);
         services.AddAuthorization();
         return services;
     }

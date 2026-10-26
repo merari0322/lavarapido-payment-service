@@ -142,4 +142,8 @@ public sealed class PaymentQueryService : IPaymentQueryUseCases
         var booking = await _bookings.RequireForAdminAsync(bookingId, ct);
         return await _amountDue.BreakdownAsync(booking, ct);
     }
+
+    /// <inheritdoc />
+    public async Task<BookingReportedDto> BookingReportedAsync(long bookingId, CancellationToken ct) =>
+        new(bookingId, await _payments.HasReportedPaymentAsync(bookingId, ct));
 }

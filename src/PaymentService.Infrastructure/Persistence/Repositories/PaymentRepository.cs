@@ -26,6 +26,12 @@ internal sealed class PaymentRepository : IPaymentRepository
         _db.Payments.AnyAsync(p => p.BookingId == bookingId
             && (p.Status == PaymentStatus.Pending || p.Status == PaymentStatus.InReview), ct);
 
+    // Misma regla que PaymentStatusCodes.CountsAsReported, escrita aquí para que EF la traduzca a SQL
+    // (no carga los comprobantes: solo un EXISTS).
+    public Task<bool> HasReportedPaymentAsync(long bookingId, CancellationToken ct) =>
+        _db.Payments.AnyAsync(p => p.BookingId == bookingId
+            && (p.Status == PaymentStatus.InReview || p.Status == PaymentStatus.Approved), ct);
+
     // Usa el índice ix_payment_receipt_reference.
     public Task<bool> IsTransactionReferenceUsedElsewhereAsync(string transactionReference, long bookingId,
         CancellationToken ct) =>

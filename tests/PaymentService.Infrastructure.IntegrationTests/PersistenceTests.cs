@@ -75,6 +75,24 @@ public sealed class PersistenceTests
     }
 
     [IntegrationFact]
+    public async Task HasReportedPayment_CountsInReviewAndApprovedButNotRejected()
+    {
+        var reviewed = DatabaseFixture.NewId();
+        var rejected = DatabaseFixture.NewId();
+        await SaveReportedPaymentAsync(reviewed);
+        var rejectedId = await SaveReportedPaymentAsync(rejected);
+
+        await using var scope = _db.NewRequest();
+        var payments = Get<IPaymentRepository>(scope);
+        (await payments.GetByIdAsync(rejectedId, default))!.Reject(9, "No se lee", Now);
+        await Get<IUnitOfWork>(scope).CommitAsync(default);
+
+        Assert.True(await payments.HasReportedPaymentAsync(reviewed, default));
+        Assert.False(await payments.HasReportedPaymentAsync(rejected, default));
+        Assert.False(await payments.HasReportedPaymentAsync(DatabaseFixture.NewId(), default));
+    }
+
+    [IntegrationFact]
     public async Task TwoAdminsApprovingTheSamePaymentAtOnce_TheSecondGetsAConflict()
     {
         var paymentId = await SaveReportedPaymentAsync(DatabaseFixture.NewId());

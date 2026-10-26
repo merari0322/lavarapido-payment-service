@@ -164,6 +164,7 @@ src/
 
 | Evento | Routing key | Cuándo |
 |--------|-------------|--------|
+| `PaymentReported` | `payment.reported` | el cliente reportó el pago con su comprobante (también al reintentar tras un rechazo); lo escucha booking-service para no vencer la reserva |
 | `PaymentConfirmed` | `payment.confirmed` | pago aprobado (también el registrado en persona) |
 | `PaymentRejected` | `payment.rejected` | pago rechazado (incluye `reason`) |
 | `PaymentRefunded` | `payment.refunded` | pago reembolsado |
@@ -186,6 +187,11 @@ Todas las rutas empiezan con `/api/v1`.
 | `GET /admin/payments/{id}` | ADMIN | Es la forma de pedir la imagen del comprobante de un pago de la página |
 | `POST /admin/payments/{id}/approve` | ADMIN | 409 `AMOUNT_CHANGED` si el monto del pago ya no es lo que se debe hoy de la reserva (BIZ-01) |
 | `POST /payments`, `POST /admin/payments`, `POST /loyalty/redeem` | — | `bookingId` y `paymentAccountId` obligatorios: 400 `VALIDATION_ERROR` si faltan (BIZ-13) |
+
+Ruta interna nueva (26-10-2026, sin `/api/v1` y fuera del gateway): `GET /internal/v1/payments/bookings/{bookingId}/reported`
+responde `{bookingId, reported}` (`true` con un pago `IN_REVIEW` o `APPROVED`). Exige el encabezado
+`X-Internal-Key` con el valor de `INTERNAL_API_KEY`; sin él o con otro valor → 401. Lo llama
+booking-service antes de cancelar una reserva por falta de pago.
 
 Campos nuevos en las respuestas (los anteriores no cambian):
 
