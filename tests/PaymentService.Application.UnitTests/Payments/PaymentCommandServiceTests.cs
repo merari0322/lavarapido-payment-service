@@ -105,6 +105,19 @@ public class PaymentCommandServiceTests
     }
 
     [Fact]
+    public async Task Report_OnACancelledBooking_IsAConflictAndPublishesNothing()
+    {
+        _bookings.Bookings[BookingId] = _bookings.Bookings[BookingId] with { Status = "CANCELLED" };
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() => _service.ReportAsync(
+            new ReportPaymentCommand(BookingId, 1, null, "data:image/png;base64,AAA"), Customer, default));
+
+        Assert.Equal(ErrorCodes.BookingNotPayable, error.Code);
+        Assert.Empty(_payments.Saved);
+        Assert.Empty(_events.Published);
+    }
+
+    [Fact]
     public async Task Report_WithAReferenceAlreadyUsedForAnotherBooking_IsRejected()
     {
         // RF-016: el mismo comprobante no puede respaldar el pago de dos reservas distintas
