@@ -535,6 +535,15 @@ En `POST /payments`, `POST /admin/payments` y `POST /loyalty/redeem`, `bookingId
 | PATCH | `/admin/promotions/{id}/active` | Pausar / reanudar `{active}` | `PromotionDto` |
 | DELETE | `/admin/promotions/{id}` | Borrado lógico | 204 |
 
+**Entre servicios (llave interna, sin JWT ni `/api/v1`)**
+
+Encabezado `X-Internal-Key` con el valor de `INTERNAL_API_KEY` (el mismo de booking y security). Sin
+llave, con llave errada o sin `INTERNAL_API_KEY` configurada → 401. El gateway no enruta `/internal/**`.
+
+| Método | Ruta | Qué hace | Respuesta |
+|--------|------|----------|-----------|
+| GET | `/internal/v1/payments/bookings/{bookingId}/reported` | Si la reserva tiene un pago `IN_REVIEW` o `APPROVED` (uno `REJECTED` no cuenta). Lo usa `PaymentDeadlineJob` de booking-service antes de cancelar por falta de pago | `{bookingId, reported}` |
+
 **Salud:** `GET /health` y `GET /actuator/health` (sin autenticación).
 
 ### 7.4 Forma de `PaymentDto`
@@ -796,6 +805,7 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | `JWT_ISSUER` / `JWT_AUDIENCE` | `lavarapido-security-service` / `lavarapido-api` | Validación del token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Orígenes separados por coma |
 | `BOOKING_SERVICE_URL` | `http://localhost:3003/api/v1` | Base de booking-service |
+| `INTERNAL_API_KEY` | vacía (rutas `/internal/**` cerradas) | Llave entre servicios que llega en `X-Internal-Key` |
 | `MESSAGING_ENABLED` | `false` | Activa RabbitMQ |
 | `RABBITMQ_HOST/PORT/USERNAME/PASSWORD` | `localhost/5672/guest/guest` | Conexión al bus |
 

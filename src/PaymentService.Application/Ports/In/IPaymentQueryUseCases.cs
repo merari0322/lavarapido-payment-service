@@ -36,4 +36,10 @@ public interface IPaymentQueryUseCases
 
     /// <summary>Lo que falta por pagar de una reserva (el monto con el que quedaría un pago en caja).</summary>
     Task<AmountDueDto> AmountDueAsync(long bookingId, CancellationToken ct);
+
+    /// <summary>
+    /// Para booking-service (ruta interna, sin usuario): si la reserva tiene un pago en revisión o
+    /// aprobado. No consulta booking-service: solo mira los pagos de esa reserva.
+    /// </summary>
+    Task<BookingReportedDto> BookingReportedAsync(long bookingId, CancellationToken ct);
 }

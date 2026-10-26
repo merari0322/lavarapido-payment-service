@@ -16,6 +16,12 @@ public interface IPaymentRepository
     Task<bool> HasOpenPaymentAsync(long bookingId, CancellationToken ct);
 
     /// <summary>
+    /// Si la reserva tiene un pago en revisión o aprobado (PaymentStatusCodes.CountsAsReported).
+    /// Lo consulta booking-service antes de cancelar una reserva por falta de pago.
+    /// </summary>
+    Task<bool> HasReportedPaymentAsync(long bookingId, CancellationToken ct);
+
+    /// <summary>
     /// Control antifraude: si esa referencia de transacción ya aparece en un comprobante de un pago
     /// de OTRA reserva (el mismo comprobante usado para pagar dos reservas distintas).
     /// </summary>

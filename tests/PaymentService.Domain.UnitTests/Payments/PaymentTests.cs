@@ -437,6 +437,17 @@ public class PaymentTests
         Assert.Throws<DomainException>(() => PaymentStatusCodes.Parse("PAGADO"));
     }
 
+    [Theory]
+    [InlineData(PaymentStatus.Pending, false)]
+    [InlineData(PaymentStatus.InReview, true)]
+    [InlineData(PaymentStatus.Approved, true)]
+    [InlineData(PaymentStatus.Rejected, false)]
+    [InlineData(PaymentStatus.Refunded, false)]
+    public void Status_CountsAsReportedOnlyInReviewOrApproved(PaymentStatus status, bool expected)
+    {
+        Assert.Equal(expected, status.CountsAsReported());
+    }
+
     // ---- Fechas (el aggregate usa el "ahora" que recibe, nunca el reloj del sistema) ----
 
     [Fact]
