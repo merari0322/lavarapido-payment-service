@@ -36,6 +36,13 @@ public static class PaymentStatusCodes
     public static bool IsOpen(this PaymentStatus status) =>
         status is PaymentStatus.Pending or PaymentStatus.InReview;
 
+    /// <summary>
+    /// El pago cuenta como "reportado" para la reserva: el cliente subió el comprobante (en revisión)
+    /// o el pago ya está aprobado. Un pago rechazado no cuenta (contrato pago-reserva, regla 4).
+    /// </summary>
+    public static bool CountsAsReported(this PaymentStatus status) =>
+        status is PaymentStatus.InReview or PaymentStatus.Approved;
+
     /// <summary>Convierte el código recibido (sin distinguir mayúsculas) o lanza INVALID_PAYMENT_STATUS.</summary>
     public static PaymentStatus Parse(string code)
     {

@@ -241,6 +241,54 @@ public class PaymentQueryServiceTests
     private void AddPayment(Payment payment) =>
         _payments.Saved.Add(payment.WithId<Payment, long>(_payments.Saved.Count + 1));
 
+    // ---- Ruta interna para booking-service: ¿la reserva ya tiene pago reportado? ----
+
+    [Fact]
+    public async Task BookingReported_WithAPaymentInReview_IsTrue()
+    {
+        AddPayment(Reported(BookingId));
+
+        Assert.Equal(new BookingReportedDto(BookingId, true), await _service.BookingReportedAsync(BookingId, default));
+    }
+
+    [Fact]
+    public async Task BookingReported_WithAnApprovedPayment_IsTrue()
+    {
+        var payment = Reported(BookingId);
+        payment.Approve(9, FixedClock.Now);
+        AddPayment(payment);
+
+        Assert.True((await _service.BookingReportedAsync(BookingId, default)).Reported);
+    }
+
+    [Fact]
+    public async Task BookingReported_WithOnlyARejectedPayment_IsFalse()
+    {
+        var payment = Reported(BookingId);
+        payment.Reject(9, "No se lee", FixedClock.Now);
+        AddPayment(payment);
+
+        Assert.Equal(new BookingReportedDto(BookingId, false), await _service.BookingReportedAsync(BookingId, default));
+    }
+
+    [Fact]
+    public async Task BookingReported_WithoutPaymentsOrWithPaymentsOfOtherBookings_IsFalse()
+    {
+        AddPayment(Reported(99));
+
+        Assert.False((await _service.BookingReportedAsync(BookingId, default)).Reported);
+    }
+
+    [Fact]
+    public async Task BookingReported_DoesNotNeedBookingService()
+    {
+        // la llama el job de booking-service: no hay usuario ni hace falta la reserva
+        _bookings.Bookings.Clear();
+        AddPayment(Reported(BookingId));
+
+        Assert.True((await _service.BookingReportedAsync(BookingId, default)).Reported);
+    }
+
     // ---- Historial del cliente (RF-015) ----
 
     private void ThreeBookingsWithPayments()

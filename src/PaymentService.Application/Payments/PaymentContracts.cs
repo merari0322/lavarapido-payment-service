@@ -64,6 +64,14 @@ public sealed record BookingPaymentStateDto(
     string? PaymentStatus,
     bool Payable);
 
+/// <summary>
+/// Respuesta interna para booking-service: si la reserva ya tiene un pago reportado (en revisión o
+/// aprobado). Con reported = true el job de vencimiento no la cancela.
+/// </summary>
+public sealed record BookingReportedDto(
+    long BookingId,
+    bool Reported);
+
 /// <summary>Los datos de la reserva que se muestran junto al pago.</summary>
 public sealed record PaymentBookingDto(
     long Id,

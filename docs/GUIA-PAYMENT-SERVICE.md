@@ -535,6 +535,15 @@ En `POST /payments`, `POST /admin/payments` y `POST /loyalty/redeem`, `bookingId
 | PATCH | `/admin/promotions/{id}/active` | Pausar / reanudar `{active}` | `PromotionDto` |
 | DELETE | `/admin/promotions/{id}` | Borrado lógico | 204 |
 
+**Entre servicios (llave interna, sin JWT ni `/api/v1`)**
+
+Encabezado `X-Internal-Key` con el valor de `INTERNAL_API_KEY` (el mismo de booking y security). Sin
+llave, con llave errada o sin `INTERNAL_API_KEY` configurada → 401. El gateway no enruta `/internal/**`.
+
+| Método | Ruta | Qué hace | Respuesta |
+|--------|------|----------|-----------|
+| GET | `/internal/v1/payments/bookings/{bookingId}/reported` | Si la reserva tiene un pago `IN_REVIEW` o `APPROVED` (uno `REJECTED` no cuenta). Lo usa `PaymentDeadlineJob` de booking-service antes de cancelar por falta de pago | `{bookingId, reported}` |
+
 **Salud:** `GET /health` y `GET /actuator/health` (sin autenticación).
 
 ### 7.4 Forma de `PaymentDto`
@@ -582,9 +591,9 @@ Cliente  ──POST /payments──►  PaymentsController
   3. Guard: cuenta activa y que exige comprobante (no efectivo)
   4. Guard: la referencia no se usó en OTRA reserva     (409 TRANSACTION_REFERENCE_REUSED)
   5. monto = AmountDueCalculator (total − cupones)
-  6. Payment.ReportWithReceipt(...)  → valida imagen → IN_REVIEW
+  6. Payment.ReportWithReceipt(...)  → valida imagen → IN_REVIEW, evento PaymentReported
   7. Commit
-  8. (sin eventos: todavía no hay decisión)
+  8. Publica payment.reported → booking-service marca la reserva como reportada (ya no vence)
   ◄── 201 PaymentDto
 ```
 
@@ -714,10 +723,11 @@ Todas las tablas tienen `created_at/by`, `updated_at/by`, `deleted_at/by` y `row
 ## 10. Eventos que publica
 
 Exchange `carwash.events` (topic), activo con `MESSAGING_ENABLED=true`. Los escucha
-notification-service.
+notification-service (y booking-service, `payment.reported` y `payment.confirmed`).
 
 | Evento | Routing key | Cuándo | Payload |
 |--------|-------------|--------|---------|
+| `PaymentReported` | `payment.reported` | El cliente reportó el pago con comprobante (también al reintentar tras un rechazo) | `paymentId, bookingId, customerUserId, amount` |
 | `PaymentConfirmed` | `payment.confirmed` | Pago aprobado (también en caja) | `paymentId, bookingId, customerUserId, amount` |
 | `PaymentRejected` | `payment.rejected` | Pago rechazado | `... + reason` |
 | `PaymentRefunded` | `payment.refunded` | Pago reembolsado | `paymentId, bookingId, customerUserId, amount` |
@@ -795,6 +805,7 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | `JWT_ISSUER` / `JWT_AUDIENCE` | `lavarapido-security-service` / `lavarapido-api` | Validación del token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Orígenes separados por coma |
 | `BOOKING_SERVICE_URL` | `http://localhost:3003/api/v1` | Base de booking-service |
+| `INTERNAL_API_KEY` | vacía (rutas `/internal/**` cerradas) | Llave entre servicios que llega en `X-Internal-Key` |
 | `MESSAGING_ENABLED` | `false` | Activa RabbitMQ |
 | `RABBITMQ_HOST/PORT/USERNAME/PASSWORD` | `localhost/5672/guest/guest` | Conexión al bus |
 

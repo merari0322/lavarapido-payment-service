@@ -61,6 +61,9 @@ internal sealed class FakePaymentRepository : IPaymentRepository
     public Task<bool> HasOpenPaymentAsync(long bookingId, CancellationToken ct) =>
         Task.FromResult(Saved.Any(p => p.BookingId == bookingId && p.Status.IsOpen()));
 
+    public Task<bool> HasReportedPaymentAsync(long bookingId, CancellationToken ct) =>
+        Task.FromResult(Saved.Any(p => p.BookingId == bookingId && p.Status.CountsAsReported()));
+
     public Task<bool> IsTransactionReferenceUsedElsewhereAsync(string reference, long bookingId, CancellationToken ct) =>
         Task.FromResult(Saved.Any(p => p.BookingId != bookingId && p.Receipts.Any(r => r.TransactionReference == reference)));
 
