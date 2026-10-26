@@ -245,12 +245,12 @@ dotnet build
 dotnet test
 ```
 
-Esperado: `Build succeeded` con 0 errores, y 225 pruebas pasadas al 24-10-2026 (con los arreglos del
-23-10 fusionados): 134 del dominio, 52 de los casos de uso (prueban Application con dobles en
-memoria de sus puertos de salida), 34 de la capa HTTP (`PaymentService.Api.UnitTests`: 27 de
-autorización por rol (F-04) y 7 de campos obligatorios y formato de los errores de validación) y 5
-de infraestructura que no necesitan base (qué 409 corresponde a cada índice único). Además hay 11
-de integración, que salen como omitidas si no se configura su base (ver abajo).
+Esperado: `Build succeeded` con 0 errores, y 252 pruebas pasadas al 26-10-2026 (rama develop):
+142 del dominio, 61 de los casos de uso (prueban Application con dobles en memoria de sus puertos
+de salida), 44 de la capa HTTP (`PaymentService.Api.UnitTests`: autorización por rol (F-04),
+campos obligatorios y formato de los errores de validación) y 5 de infraestructura que no necesitan
+base (qué 409 corresponde a cada índice único). Además hay 12 de integración, que salen como
+omitidas si no se configura su base (ver abajo).
 
 ### Pruebas de integración (contra SQL Server real, opcionales)
 
@@ -279,7 +279,7 @@ $env:PAYMENT_INTEGRATION_DB = "Server=localhost,1434;Database=lavado_vehicular;U
 dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 
-Sin la variable, estas 11 pruebas aparecen como **omitidas** (no fallan). Para borrar la base de
+Sin la variable, estas 12 pruebas aparecen como **omitidas** (no fallan). Para borrar la base de
 prueba y empezar de cero: `docker compose down -v`.
 
 ## 3. Levantar la API y ver que responde
