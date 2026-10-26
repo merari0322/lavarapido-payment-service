@@ -7,7 +7,8 @@ namespace PaymentService.Application.Payments;
 /// <summary>
 /// Traduce los eventos de dominio de un pago al contrato de integración que escucha
 /// notification-service (routing keys payment.confirmed / payment.rejected / payment.refunded;
-/// el consumidor lee paymentId, customerUserId, amount y reason).
+/// el consumidor lee paymentId, customerUserId, amount y reason) y booking-service
+/// (payment.reported y payment.confirmed: la reserva ya tiene su comprobante).
 ///
 /// El dominio no sabe quién es el cliente (la reserva es de booking-service), por eso
 /// customerUserId llega aparte. El PaymentId se toma del aggregate ya guardado, no del evento.
@@ -19,6 +20,7 @@ internal static class PaymentIntegrationEvents
 
     private static IntegrationEvent? Map(Payment payment, IDomainEvent domainEvent, long? customerUserId) => domainEvent switch
     {
+        PaymentReported e => Create("PaymentReported", "payment.reported", payment, customerUserId, e.BookingId, e.Amount, null, e.OccurredOnUtc),
         PaymentApproved e => Create("PaymentConfirmed", "payment.confirmed", payment, customerUserId, e.BookingId, e.Amount, null, e.OccurredOnUtc),
         PaymentRejected e => Create("PaymentRejected", "payment.rejected", payment, customerUserId, e.BookingId, e.Amount, e.Reason, e.OccurredOnUtc),
         PaymentRefunded e => Create("PaymentRefunded", "payment.refunded", payment, customerUserId, e.BookingId, e.Amount, null, e.OccurredOnUtc),

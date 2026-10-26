@@ -54,10 +54,55 @@ public class PaymentCommandServiceTests
     {
         var dto = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, "REF-1", "data:image/png;base64,AAA"),
             Customer, default);
+        // las pruebas que parten de un pago reportado solo miran los eventos de lo que hacen después
+        _events.Published.Clear();
         return dto.Id;
     }
 
     // ---- Reportar ----
+
+    [Fact]
+    public async Task Report_PublishesPaymentReportedWithTheSamePayloadAsTheOtherPaymentEvents()
+    {
+        var dto = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, "REF-1", "data:image/png;base64,AAA"),
+            Customer, default);
+
+        var reported = Assert.Single(_events.Published);
+        Assert.Equal("PaymentReported", reported.EventType);
+        Assert.Equal("payment.reported", reported.RoutingKey);
+        Assert.Equal(dto.Id.ToString(), reported.AggregateId);
+        Assert.Equal(FixedClock.Now, reported.OccurredOnUtc);
+        Assert.Equal(new[] { "paymentId", "bookingId", "customerUserId", "amount" }, reported.Payload.Keys);
+        Assert.Equal(dto.Id, reported.Payload["paymentId"]);
+        Assert.Equal(BookingId, reported.Payload["bookingId"]);
+        Assert.Equal(CustomerId, reported.Payload["customerUserId"]);
+        Assert.Equal(50_000m, reported.Payload["amount"]);
+        Assert.Empty((await _payments.GetByIdAsync(dto.Id, default))!.DomainEvents);
+    }
+
+    [Fact]
+    public async Task Report_AgainAfterARejection_PublishesPaymentReportedForTheNewPayment()
+    {
+        var paymentId = await ReportedPaymentAsync();
+        await _service.RejectAsync(paymentId, "El comprobante no se lee", Admin, default);
+        Assert.Equal("payment.rejected", Assert.Single(_events.Published).RoutingKey);
+
+        var again = await _service.ReportAsync(new ReportPaymentCommand(BookingId, 1, "REF-1", "data:image/png;base64,BBB"),
+            Customer, default);
+
+        var reported = _events.Published.Last();
+        Assert.Equal("payment.reported", reported.RoutingKey);
+        Assert.Equal(again.Id, reported.Payload["paymentId"]);
+        Assert.NotEqual(paymentId, again.Id);
+    }
+
+    [Fact]
+    public async Task RegisterInPerson_DoesNotPublishPaymentReported()
+    {
+        await _service.RegisterInPersonAsync(new RegisterInPersonPaymentCommand(BookingId, 1, null), Admin, default);
+
+        Assert.DoesNotContain(_events.Published, e => e.RoutingKey == "payment.reported");
+    }
 
     [Fact]
     public async Task Report_WithAReferenceAlreadyUsedForAnotherBooking_IsRejected()

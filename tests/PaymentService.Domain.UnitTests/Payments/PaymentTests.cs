@@ -354,6 +354,40 @@ public class PaymentTests
     // ---- Eventos de dominio ----
 
     [Fact]
+    public void ReportWithReceipt_RaisesPaymentReportedEventWithBookingAmountAndTime()
+    {
+        var payment = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, null, Now);
+
+        var reported = Assert.IsType<PaymentReported>(Assert.Single(payment.DomainEvents));
+        Assert.Equal(10, reported.BookingId);
+        Assert.Equal(80m, reported.Amount);
+        Assert.Equal(Now, reported.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void ReportWithReceipt_AgainAfterARejection_RaisesPaymentReportedForTheNewPayment()
+    {
+        // el reintento tras un rechazo es un pago nuevo de la misma reserva: también avisa
+        var first = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,AAA", reportedBy: 5, null, Now);
+        first.Reject(Admin, "No se lee.", Now);
+
+        var again = Payment.ReportWithReceipt(10, 2, 80m, "data:image/png;base64,BBB", reportedBy: 5, null, Now.AddMinutes(5));
+
+        var reported = Assert.IsType<PaymentReported>(Assert.Single(again.DomainEvents));
+        Assert.Equal(10, reported.BookingId);
+        Assert.Equal(Now.AddMinutes(5), reported.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void RegisterInPerson_DoesNotRaisePaymentReported()
+    {
+        // el efectivo lo registra el admin y ya sale aprobado: basta con PaymentApproved
+        var payment = Payment.RegisterInPerson(10, 1, 80m, registeredBy: Admin, transactionReference: null, nowUtc: Now);
+
+        Assert.DoesNotContain(payment.DomainEvents, e => e is PaymentReported);
+    }
+
+    [Fact]
     public void Approve_RaisesPaymentApprovedEventWithBookingAndAmount()
     {
         var payment = InReviewPayment();

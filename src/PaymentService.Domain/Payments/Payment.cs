@@ -90,6 +90,8 @@ public sealed class Payment : AggregateRoot<long>
         var payment = Create(bookingId, paymentAccountId, amount);
         payment.AttachReceipt(receiptFile, reportedBy, nowUtc, transactionReference, reportedAmount);
         payment.SubmitForReview();
+        // Solo este camino (el del cliente) avisa "pago reportado"; el registrado en persona ya sale aprobado.
+        payment.AddDomainEvent(new PaymentReported(bookingId, amount, nowUtc));
         return payment;
     }
 

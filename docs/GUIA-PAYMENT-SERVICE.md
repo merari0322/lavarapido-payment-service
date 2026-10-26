@@ -582,9 +582,9 @@ Cliente  ──POST /payments──►  PaymentsController
   3. Guard: cuenta activa y que exige comprobante (no efectivo)
   4. Guard: la referencia no se usó en OTRA reserva     (409 TRANSACTION_REFERENCE_REUSED)
   5. monto = AmountDueCalculator (total − cupones)
-  6. Payment.ReportWithReceipt(...)  → valida imagen → IN_REVIEW
+  6. Payment.ReportWithReceipt(...)  → valida imagen → IN_REVIEW, evento PaymentReported
   7. Commit
-  8. (sin eventos: todavía no hay decisión)
+  8. Publica payment.reported → booking-service marca la reserva como reportada (ya no vence)
   ◄── 201 PaymentDto
 ```
 
@@ -714,10 +714,11 @@ Todas las tablas tienen `created_at/by`, `updated_at/by`, `deleted_at/by` y `row
 ## 10. Eventos que publica
 
 Exchange `carwash.events` (topic), activo con `MESSAGING_ENABLED=true`. Los escucha
-notification-service.
+notification-service (y booking-service, `payment.reported` y `payment.confirmed`).
 
 | Evento | Routing key | Cuándo | Payload |
 |--------|-------------|--------|---------|
+| `PaymentReported` | `payment.reported` | El cliente reportó el pago con comprobante (también al reintentar tras un rechazo) | `paymentId, bookingId, customerUserId, amount` |
 | `PaymentConfirmed` | `payment.confirmed` | Pago aprobado (también en caja) | `paymentId, bookingId, customerUserId, amount` |
 | `PaymentRejected` | `payment.rejected` | Pago rechazado | `... + reason` |
 | `PaymentRefunded` | `payment.refunded` | Pago reembolsado | `paymentId, bookingId, customerUserId, amount` |

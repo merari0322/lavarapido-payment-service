@@ -164,6 +164,7 @@ src/
 
 | Evento | Routing key | Cuándo |
 |--------|-------------|--------|
+| `PaymentReported` | `payment.reported` | el cliente reportó el pago con su comprobante (también al reintentar tras un rechazo); lo escucha booking-service para no vencer la reserva |
 | `PaymentConfirmed` | `payment.confirmed` | pago aprobado (también el registrado en persona) |
 | `PaymentRejected` | `payment.rejected` | pago rechazado (incluye `reason`) |
 | `PaymentRefunded` | `payment.refunded` | pago reembolsado |
