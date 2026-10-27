@@ -257,7 +257,7 @@ Esperado: `Build succeeded` con 0 errores, y 260 pruebas pasadas al 27-10-2026 (
 de salida), 47 de la capa HTTP (`PaymentService.Api.UnitTests`: autorización por rol (F-04),
 campos obligatorios, formato de los errores de validación y que el servicio no arranque sin
 `DB_PASSWORD`) y 10 de infraestructura que no necesitan base (qué 409 corresponde a cada índice
-único y que RabbitMQ exija usuario y contraseña). Además hay 12 de integración, que salen como
+único y que un RabbitMQ remoto exija usuario y contraseña). Además hay 12 de integración, que salen como
 omitidas si no se configura su base (ver abajo).
 
 ### Pruebas de integración (contra SQL Server real, opcionales)

@@ -808,7 +808,7 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | `INTERNAL_API_KEY` | vacía (rutas `/internal/**` cerradas) | Llave entre servicios que llega en `X-Internal-Key` |
 | `MESSAGING_ENABLED` | `false` | Activa RabbitMQ |
 | `RABBITMQ_HOST/PORT` | `localhost/5672` | Conexión al bus |
-| `RABBITMQ_USERNAME/PASSWORD` | — | Obligatorios si `MESSAGING_ENABLED=true`: sin ellos el servicio no arranca (ya no usa `guest/guest` por defecto) |
+| `RABBITMQ_USERNAME/PASSWORD` | `guest/guest` solo si `RABBITMQ_HOST` es local | Con `MESSAGING_ENABLED=true` y un RabbitMQ remoto (Docker, servidor) son obligatorios: sin ellos el servicio no arranca |
 
 ---
 
@@ -819,7 +819,7 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 142 |
 | `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 61 |
 | `PaymentService.Api.UnitTests` | Sin levantar el servicio: 403 por rol en cada ruta de los 5 controladores (F-04), campos obligatorios de los requests, formato de los errores de validación y que el servicio no arranque sin `DB_PASSWORD` | 47 |
-| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único y que RabbitMQ exija usuario y contraseña (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 10 + 12 (las 12 se omiten sin `PAYMENT_INTEGRATION_DB`) |
+| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único y que un RabbitMQ remoto exija usuario y contraseña (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 10 + 12 (las 12 se omiten sin `PAYMENT_INTEGRATION_DB`) |
 | `scripts/e2e/payment_flow.py` | Flujo completo por el gateway con todos los servicios arriba | — |
 
 ```bash
