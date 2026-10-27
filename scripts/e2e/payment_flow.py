@@ -123,8 +123,10 @@ for offset in range(1, 15):
         break
 if slot is None:
     sys.exit("No encontré horarios libres en los próximos 14 días.")
+# desde el 26-10-2026 el cliente elige cómo paga al reservar; el flujo reporta un comprobante: DIGITAL
 status, booking = call("POST", "/bookings", client_token, {"vehicleId": vehicle["id"], "serviceIds": [service["id"]],
-                                                           "date": slot[0], "time": slot[1], "notes": "Prueba E2E pagos"})
+                                                           "date": slot[0], "time": slot[1], "notes": "Prueba E2E pagos",
+                                                           "paymentMode": "DIGITAL"})
 check("crear reserva -> 201", status, 201)
 check("la reserva nace confirmada", booking["status"], "CONFIRMED")
 booking_id, total, points = booking["id"], booking["total"], booking["totalLoyaltyPoints"]
@@ -136,7 +138,8 @@ if points == 0:
 
 step("4. El admin prepara una cuenta Nequi y una promoción del 10% (payment-service)")
 created_account = None
-accounts = call("GET", "/payment-accounts", client_token)[1]
+# el flujo reporta un comprobante: sirve una cuenta digital (Nequi, Daviplata, transferencia), no Efectivo
+accounts = [a for a in call("GET", "/payment-accounts", client_token)[1] or [] if a.get("requiresReceipt")]
 if accounts:
     account_id = accounts[0]["id"]
     print(f"  uso la cuenta existente {accounts[0]['methodName']} (id={account_id})")
