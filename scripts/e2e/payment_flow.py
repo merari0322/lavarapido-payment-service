@@ -7,7 +7,9 @@ web y el móvil:
     admin aprueba (se acreditan puntos + notificación) -> admin reembolsa (se revierten puntos)
 
 Requisitos: todo el backend arriba (ver GUIA-EQUIPO.md, sección 4) y los usuarios de prueba
-(cliente@gmail.com / admin@gmail.com). Uso:
+(cliente@gmail.com / admin@gmail.com). Sus contraseñas NO van en el código: se leen de las
+variables DEMO_CLIENT_PASSWORD y DEMO_ADMIN_PASSWORD (las mismas con las que security-service crea
+esas cuentas en el perfil dev), del entorno o de ../lavarapido-infra/.env. Uso:
 
     python -X utf8 scripts/e2e/payment_flow.py
 
@@ -15,6 +17,7 @@ Deja la base como estaba: borra la promoción de prueba, desactiva la cuenta de 
 cancela la reserva. El vehículo de prueba queda registrado (placa ZZE + 3 números) y se reutiliza.
 """
 import json
+import os
 import random
 import string
 import sys
@@ -22,10 +25,27 @@ import time
 import urllib.error
 import urllib.request
 from datetime import date, timedelta
+from pathlib import Path
 
 GATEWAY = "http://localhost:8080/api/v1"
-CLIENT = ("cliente@gmail.com", "Cliente123!")
-ADMIN = ("admin@gmail.com", "Admin123!")
+INFRA_ENV = Path(__file__).resolve().parents[3] / "lavarapido-infra" / ".env"
+
+
+def demo_password(name):
+    """Contraseña de una cuenta demo: del entorno o de lavarapido-infra/.env, nunca del código."""
+    value = os.environ.get(name)
+    if not value and INFRA_ENV.exists():
+        for line in INFRA_ENV.read_text(encoding="utf-8").splitlines():
+            key, sep, raw = line.partition("=")
+            if sep and key.strip() == name:
+                value = raw.strip().strip('"')
+    if not value:
+        sys.exit(f"Falta {name}: defínela en el entorno o en {INFRA_ENV}")
+    return value
+
+
+CLIENT = ("cliente@gmail.com", demo_password("DEMO_CLIENT_PASSWORD"))
+ADMIN = ("admin@gmail.com", demo_password("DEMO_ADMIN_PASSWORD"))
 failures = 0
 
 
