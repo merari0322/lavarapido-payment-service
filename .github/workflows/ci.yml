@@ -46,20 +46,21 @@ jobs:
 
   # H-13: las pruebas de persistencia (EF Core, índices únicos filtrados, concurrencia real) contra
   # SQL Server 2022, con las mismas migraciones de Liquibase que usa payment-migrate en producción.
-  # La base y la contraseña son desechables: solo viven mientras corre este job.
+  # La base y la contraseña son desechables: solo viven mientras corre este job. La contraseña se
+  # arma con el id de la corrida (cambia en cada una); va repetida porque el bloque services no ve env.
   integration:
     name: Pruebas de integración
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SA_PASSWORD: Ci-Payment-${{ github.run_id }}-Aa1!
+      SA_PASSWORD: ${{ format('Ci-Payment-{0}-Aa1!', github.run_id) }}
       DB_NAME: LavaRapidoPaymentIT
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
         env:
           ACCEPT_EULA: "Y"
-          MSSQL_SA_PASSWORD: Ci-Payment-${{ github.run_id }}-Aa1!
+          MSSQL_SA_PASSWORD: ${{ format('Ci-Payment-{0}-Aa1!', github.run_id) }}
         ports:
           - 1433:1433
     steps:
@@ -72,16 +73,26 @@ jobs:
       - name: Esperar a SQL Server y crear la base
         run: |
           for _ in $(seq 1 40); do
-            if docker exec "${{ job.services.mssql.id }}" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost                  -U sa -P "$SA_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1; then
+            if docker exec "${{ job.services.mssql.id }}" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost \
+                 -U sa -P "$SA_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1; then
               break
             fi
             sleep 3
           done
-          docker exec "${{ job.services.mssql.id }}" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost             -U sa -P "$SA_PASSWORD" -Q "CREATE DATABASE [$DB_NAME]"
+          docker exec "${{ job.services.mssql.id }}" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost \
+            -U sa -P "$SA_PASSWORD" -Q "CREATE DATABASE [$DB_NAME]"
 
       - name: Migraciones (Liquibase, como payment-migrate)
         run: |
-          docker run --rm --network host -v "$PWD/db:/liquibase/changelog/db:ro"             -e LIQUIBASE_COMMAND_PASSWORD="$SA_PASSWORD" liquibase/liquibase:4.29             --search-path=/liquibase/changelog             --changelog-file=db/changelog/db.changelog-master.yaml             "--url=jdbc:sqlserver://localhost:1433;databaseName=$DB_NAME;encrypt=true;trustServerCertificate=true"             --username=sa             --database-change-log-table-name=DATABASECHANGELOG_PAYMENT             --database-change-log-lock-table-name=DATABASECHANGELOGLOCK_PAYMENT             update
+          docker run --rm --network host -v "$PWD/db:/liquibase/changelog/db:ro" \
+            -e LIQUIBASE_COMMAND_PASSWORD="$SA_PASSWORD" liquibase/liquibase:4.29 \
+            --search-path=/liquibase/changelog \
+            --changelog-file=db/changelog/db.changelog-master.yaml \
+            "--url=jdbc:sqlserver://localhost:1433;databaseName=$DB_NAME;encrypt=true;trustServerCertificate=true" \
+            --username=sa \
+            --database-change-log-table-name=DATABASECHANGELOG_PAYMENT \
+            --database-change-log-lock-table-name=DATABASECHANGELOGLOCK_PAYMENT \
+            update
 
       - name: Pruebas de integración
         env:
