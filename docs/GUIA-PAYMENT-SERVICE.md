@@ -166,7 +166,7 @@ src/
 ## 4. Capa de dominio
 
 Aquí están **todas las reglas del negocio**. Ninguna clase de esta capa sabe de base de datos ni
-HTTP; por eso se puede probar con pruebas unitarias simples (134 pruebas).
+HTTP; por eso se puede probar con pruebas unitarias simples (142 pruebas).
 
 ### 4.1 Bloques comunes (`Domain/Common`)
 
@@ -800,14 +800,15 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | Variable | Por defecto | Uso |
 |----------|-------------|-----|
 | `PAYMENT_PORT` | `3005` | Puerto HTTP |
-| `ConnectionStrings__PaymentDb` | — | Si no viene, se arma con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` |
+| `ConnectionStrings__PaymentDb` | — | Si no viene, se arma con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`; sin `DB_PASSWORD` el servicio no arranca |
 | `JWT_SECRET` | **obligatoria** | Secreto HS256 compartido con security-service |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | `lavarapido-security-service` / `lavarapido-api` | Validación del token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Orígenes separados por coma |
 | `BOOKING_SERVICE_URL` | `http://localhost:3003/api/v1` | Base de booking-service |
 | `INTERNAL_API_KEY` | vacía (rutas `/internal/**` cerradas) | Llave entre servicios que llega en `X-Internal-Key` |
 | `MESSAGING_ENABLED` | `false` | Activa RabbitMQ |
-| `RABBITMQ_HOST/PORT/USERNAME/PASSWORD` | `localhost/5672/guest/guest` | Conexión al bus |
+| `RABBITMQ_HOST/PORT` | `localhost/5672` | Conexión al bus |
+| `RABBITMQ_USERNAME/PASSWORD` | — | Obligatorios si `MESSAGING_ENABLED=true`: sin ellos el servicio no arranca (ya no usa `guest/guest` por defecto) |
 
 ---
 
@@ -815,10 +816,10 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 
 | Proyecto | Qué prueba | Cuántas |
 |----------|------------|---------|
-| `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 134 |
-| `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 52 |
-| `PaymentService.Api.UnitTests` | Sin levantar el servicio: 403 por rol en cada ruta de los 5 controladores (F-04), campos obligatorios de los requests y formato de los errores de validación | 34 |
-| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 5 + 11 (las 11 se omiten sin `PAYMENT_INTEGRATION_DB`) |
+| `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 142 |
+| `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 61 |
+| `PaymentService.Api.UnitTests` | Sin levantar el servicio: 403 por rol en cada ruta de los 5 controladores (F-04), campos obligatorios de los requests, formato de los errores de validación y que el servicio no arranque sin `DB_PASSWORD` | 47 |
+| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único y que RabbitMQ exija usuario y contraseña (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 10 + 12 (las 12 se omiten sin `PAYMENT_INTEGRATION_DB`) |
 | `scripts/e2e/payment_flow.py` | Flujo completo por el gateway con todos los servicios arriba | — |
 
 ```bash
