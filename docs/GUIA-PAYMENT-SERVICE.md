@@ -819,7 +819,7 @@ Las variables salen de `lavarapido-infra/.env` (o del entorno, que tiene priorid
 | `PaymentService.Domain.UnitTests` | Máquina de estados, políticas, promociones, ledger | 142 |
 | `PaymentService.Application.UnitTests` | Casos de uso con **dobles en memoria** de los puertos (`Fakes/InMemoryPorts.cs`) | 61 |
 | `PaymentService.Api.UnitTests` | Sin levantar el servicio: 403 por rol en cada ruta de los 5 controladores (F-04), campos obligatorios de los requests, formato de los errores de validación y que el servicio no arranque sin `DB_PASSWORD` | 47 |
-| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único y que un RabbitMQ remoto exija usuario y contraseña (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 10 + 12 (las 12 se omiten sin `PAYMENT_INTEGRATION_DB`) |
+| `PaymentService.Infrastructure.IntegrationTests` | Qué 409 corresponde a cada índice único y que un RabbitMQ remoto exija usuario y contraseña (sin base) y, contra SQL Server, consultas EF y concurrencia real (base aislada, puerto 1434) | 13 + 12 (las 12 se omiten sin `PAYMENT_INTEGRATION_DB`) |
 | `scripts/e2e/payment_flow.py` | Flujo completo por el gateway con todos los servicios arriba | — |
 
 ```bash
