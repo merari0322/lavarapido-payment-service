@@ -3,8 +3,14 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
+# dotenv files: cualquier .env con valores reales (.env, .env.local, .env.production...). Solo se
+# sube la plantilla .env.example, sin secretos.
 .env
+.env.*
+!.env.example
+
+# configuraciones locales con secretos
+appsettings.*.local.json
 
 # User-specific files
 *.rsuser
