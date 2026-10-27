@@ -9,18 +9,24 @@ Los changelogs son SQL puro: los ejecuta Docker (Liquibase), no tu código C#.
 docker compose up --abort-on-container-exit migrate
 ```
 
-Esto arranca SQL Server, crea la base `lavado_vehicular` y aplica los changelogs.
-Cuando termine, el contenedor `pay-sqlserver` queda escuchando en `localhost:1434`.
+Esto arranca SQL Server 2022, crea la base aislada `LavaRapidoPaymentIT` (la misma que usa el job
+"Pruebas de integración" del CI) y aplica los changelogs. Cuando termine, el contenedor
+`pay-sqlserver` queda escuchando en `localhost:1434`. Antes, copia `.env.example` a `.env` y pon una
+contraseña en `MSSQL_SA_PASSWORD`.
+
+Si ya tenías esta base con la imagen de SQL Server 2019 (o con el nombre anterior,
+`lavado_vehicular`), bórrala una vez con `docker compose down -v`: es solo de pruebas.
 
 ## Comprobar que se crearon las 12 tablas
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec pay-sqlserver /opt/mssql-tools/bin/sqlcmd \
-  -S localhost -U sa -P "$DB_PASSWORD" -d lavado_vehicular \
+set -a; . ./.env; set +a
+MSYS_NO_PATHCONV=1 docker exec pay-sqlserver /opt/mssql-tools18/bin/sqlcmd -C \
+  -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -d LavaRapidoPaymentIT \
   -Q "SELECT s.name AS esquema, COUNT(*) AS tablas FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id WHERE s.name IN ('promotion','payment') GROUP BY s.name"
 ```
 
-(`$DB_PASSWORD` es la misma contraseña que pusiste en `lavarapido-infra/.env`. Nunca la escribas en claro en un commit.)
+(`$MSSQL_SA_PASSWORD` sale del `.env` de este repo, que no se sube. Nunca la escribas en claro en un commit.)
 
 Resultado esperado: `payment` = 7 y `promotion` = 5 (más las 2 tablas de control de Liquibase en `dbo`).
 
@@ -34,7 +40,8 @@ docker compose up --abort-on-container-exit migrate
 ## Con el CLI de Liquibase instalado (opcional)
 
 ```bash
-export LIQUIBASE_COMMAND_PASSWORD="$DB_PASSWORD"
+set -a; . ./.env; set +a
+export LIQUIBASE_COMMAND_PASSWORD="$MSSQL_SA_PASSWORD"
 liquibase update
 ```
 
@@ -245,11 +252,12 @@ dotnet build
 dotnet test
 ```
 
-Esperado: `Build succeeded` con 0 errores, y 252 pruebas pasadas al 26-10-2026 (rama develop):
+Esperado: `Build succeeded` con 0 errores, y 260 pruebas pasadas al 27-10-2026 (rama develop):
 142 del dominio, 61 de los casos de uso (prueban Application con dobles en memoria de sus puertos
-de salida), 44 de la capa HTTP (`PaymentService.Api.UnitTests`: autorización por rol (F-04),
-campos obligatorios y formato de los errores de validación) y 5 de infraestructura que no necesitan
-base (qué 409 corresponde a cada índice único). Además hay 12 de integración, que salen como
+de salida), 47 de la capa HTTP (`PaymentService.Api.UnitTests`: autorización por rol (F-04),
+campos obligatorios, formato de los errores de validación y que el servicio no arranque sin
+`DB_PASSWORD`) y 10 de infraestructura que no necesitan base (qué 409 corresponde a cada índice
+único y que RabbitMQ exija usuario y contraseña). Además hay 12 de integración, que salen como
 omitidas si no se configura su base (ver abajo).
 
 ### Pruebas de integración (contra SQL Server real, opcionales)
@@ -267,7 +275,7 @@ docker compose up --abort-on-container-exit migrate
 
 # 2. Correr las pruebas apuntando a esa base (en Git Bash)
 set -a; . ./.env; set +a
-PAYMENT_INTEGRATION_DB="Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=$MSSQL_SA_PASSWORD;TrustServerCertificate=True" \
+PAYMENT_INTEGRATION_DB="Server=localhost,1434;Database=LavaRapidoPaymentIT;User Id=sa;Password=$MSSQL_SA_PASSWORD;TrustServerCertificate=True" \
   dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 
@@ -275,7 +283,7 @@ En PowerShell el paso 2 es:
 
 ```powershell
 $env:MSSQL_SA_PASSWORD = (Get-Content .env | Where-Object { $_ -like 'MSSQL_SA_PASSWORD=*' }) -replace '^MSSQL_SA_PASSWORD=', ''
-$env:PAYMENT_INTEGRATION_DB = "Server=localhost,1434;Database=lavado_vehicular;User Id=sa;Password=$env:MSSQL_SA_PASSWORD;TrustServerCertificate=True"
+$env:PAYMENT_INTEGRATION_DB = "Server=localhost,1434;Database=LavaRapidoPaymentIT;User Id=sa;Password=$env:MSSQL_SA_PASSWORD;TrustServerCertificate=True"
 dotnet test tests/PaymentService.Infrastructure.IntegrationTests
 ```
 

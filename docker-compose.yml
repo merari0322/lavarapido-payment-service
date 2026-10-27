@@ -1,7 +1,9 @@
 # Entorno local SOLO de payment-service. No depende de operations-service.
+# Misma versión de SQL Server y mismo nombre de base que el job "Pruebas de integración" del CI
+# (LavaRapidoPaymentIT), para que las pruebas corran igual en local y en GitHub.
 services:
   sqlserver:
-    image: mcr.microsoft.com/mssql/server:2019-latest
+    image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: pay-sqlserver
     environment:
       ACCEPT_EULA: "Y"
@@ -31,7 +33,7 @@ services:
       - -P
       - "${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env (ver .env.example)}"
       - -Q
-      - "IF DB_ID('lavado_vehicular') IS NULL CREATE DATABASE lavado_vehicular"
+      - "IF DB_ID('LavaRapidoPaymentIT') IS NULL CREATE DATABASE LavaRapidoPaymentIT"
 
   migrate:
     image: liquibase/liquibase:4.29
@@ -43,7 +45,7 @@ services:
     command:
       - --search-path=/liquibase/changelog
       - --changelog-file=db/changelog/db.changelog-master.yaml
-      - --url=jdbc:sqlserver://sqlserver:1433;databaseName=lavado_vehicular;encrypt=true;trustServerCertificate=true
+      - --url=jdbc:sqlserver://sqlserver:1433;databaseName=LavaRapidoPaymentIT;encrypt=true;trustServerCertificate=true
       - --username=sa
       - --password=${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD en .env (ver .env.example)}
       - --database-change-log-table-name=DATABASECHANGELOG_PAYMENT
