@@ -17,10 +17,14 @@ internal static class ApiServiceCollectionExtensions
     /// <summary>
     /// Si no viene ConnectionStrings:PaymentDb, la arma con las variables DB_* de
     /// lavarapido-infra/.env (base LavaRapido compartida, ADR-003). Así no hay contraseñas en appsettings.
+    /// Sin DB_PASSWORD falla al arrancar, como JWT_SECRET, en vez de intentar conectar sin contraseña.
     /// </summary>
-    public static void EnsurePaymentConnectionString(this ConfigurationManager config)
+    public static void EnsurePaymentConnectionString(this IConfiguration config)
     {
         if (!string.IsNullOrWhiteSpace(config.GetConnectionString("PaymentDb"))) return;
+        if (string.IsNullOrWhiteSpace(config["DB_PASSWORD"]))
+            throw new InvalidOperationException(
+                "DB_PASSWORD is not set (lavarapido-infra/.env) and there is no ConnectionStrings:PaymentDb");
 
         config["ConnectionStrings:PaymentDb"] =
             $"Server={config["DB_HOST"] ?? "localhost"},{config["DB_PORT"] ?? "1433"};" +
